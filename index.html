@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#4CAF50">
-<title>Календарь с базой данных</title>
+<title>Календарь с отметками пользователей</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
@@ -41,8 +41,11 @@
     background: #4CAF50; color: white; cursor: pointer;
     touch-action: manipulation;
     transition: background 0.15s, transform 0.1s;
+    white-space: nowrap;
   }
   .user-bar button:active { background: #388e3c; transform: scale(0.95); }
+  .user-bar button.logout { background: #ff5722; }
+  .user-bar button.logout:active { background: #d84315; }
 
   .current-user {
     font-size: 15px; color: #666;
@@ -78,53 +81,69 @@
     font-size: 16px; padding: 8px 0; user-select: none;
   }
 
-  .days div {
+  /* ===== Ячейка дня ===== */
+  .days .day {
     position: relative;
-    text-align: center;
-    display: flex; align-items: center; justify-content: center;
-    aspect-ratio: 1 / 1; min-height: 48px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-start;
+    aspect-ratio: 1 / 1; min-height: 60px;
     border-radius: 14px; cursor: pointer; user-select: none;
-    font-size: 22px; font-weight: 600;
-    transition: background 0.15s, color 0.15s, transform 0.1s;
     background: #f5f5f5; color: #222;
+    padding: 4px 3px 2px;
+    transition: background 0.15s, color 0.15s, transform 0.1s;
     touch-action: manipulation;
+    overflow: hidden;
   }
-  .days div:active:not(.empty) {
-    transform: scale(0.88); background: #d0d0d0;
-  }
-  .days div.empty { background: transparent; pointer-events: none; }
+  .days .day:active { transform: scale(0.94); }
+  .days .day.empty { background: transparent; pointer-events: none; }
 
-  .days div.today {
-    border: 3px solid #4CAF50; font-weight: 800; color: #2e7d32;
-  }
+  .days .day.today { border: 3px solid #4CAF50; }
 
-  /* Отметка пользователя (не свой) — светло-зелёный */
-  .days div.has-users {
-    background: #c8e6c9;
-    color: #1b5e20;
-  }
-  /* Отметка СВОЯ — тёмно-зелёный */
-  .days div.mine {
+  .days .day.has-users { background: #c8e6c9; color: #1b5e20; }
+  .days .day.mine {
     background: #4CAF50; color: white;
     box-shadow: 0 4px 12px rgba(76,175,80,0.4);
   }
 
-  /* Бейдж с числом пользователей */
-  .days .badge {
-    position: absolute;
-    top: -4px; right: -4px;
-    min-width: 22px; height: 22px;
-    padding: 0 5px;
-    background: #ff5722; color: white;
-    border-radius: 11px;
-    font-size: 12px; font-weight: 800;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    pointer-events: none;
-  }
-  .days div.mine .badge { background: #d32f2f; }
+  .days .day .num { font-size: 18px; font-weight: 700; line-height: 1.1; }
+  .days .day.mine .num { color: white; }
+  .days .day.has-users .num { color: #1b5e20; }
 
-  /* ===== Модальное окно ===== */
+  .days .day .names {
+    margin-top: 1px;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 1px;
+    width: 100%; padding: 0 2px; overflow: hidden;
+  }
+  .days .day .names .who {
+    font-size: 9px; line-height: 1.1; font-weight: 600;
+    max-width: 100%; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+    opacity: 0.9;
+  }
+  .days .day.mine .names .who { color: #e8f5e9; }
+  .days .day.has-users .names .who { color: #2e7d32; }
+
+  .days .day .more {
+    font-size: 9px; font-weight: 800; opacity: 0.75;
+  }
+
+  .days .day .toggle-btn {
+    position: absolute;
+    bottom: 3px; right: 3px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.85);
+    color: #333; font-size: 16px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    line-height: 1; pointer-events: auto;
+    transition: transform 0.1s, background 0.15s;
+  }
+  .days .day .toggle-btn:active { transform: scale(0.85); background: white; }
+  .days .day.mine .toggle-btn { background: #d32f2f; color: white; }
+
+  /* ===== Модалка ===== */
   .modal-backdrop {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.5);
@@ -144,21 +163,20 @@
     to   { transform: scale(1);   opacity: 1; }
   }
 
-  .modal h3 {
-    margin: 0 0 6px; font-size: 18px; color: #222;
-  }
+  .modal h3 { margin: 0 0 6px; font-size: 18px; color: #222; }
   .modal .date-label {
     font-size: 14px; color: #888; margin-bottom: 12px;
   }
   .modal ul {
     list-style: none; padding: 0; margin: 0 0 16px;
-    max-height: 240px; overflow-y: auto;
+    max-height: 260px; overflow-y: auto;
   }
   .modal li {
-    padding: 12px 14px; background: #f5f5f5;
+    padding: 10px 12px; background: #f5f5f5;
     border-radius: 10px; margin-bottom: 6px;
     font-size: 16px; display: flex; align-items: center; gap: 10px;
   }
+  .modal li.me { background: #e8f5e9; }
   .modal li .avatar {
     width: 32px; height: 32px; border-radius: 50%;
     background: #4CAF50; color: white;
@@ -174,14 +192,13 @@
   }
   .modal .btn-close:active { background: #388e3c; }
 
-  /* Блокировка календаря без пользователя */
   .calendar.locked .header,
   .calendar.locked .weekdays,
   .calendar.locked .days { opacity: 0.4; pointer-events: none; }
 
   .hint {
     font-size: 12px; color: #999; text-align: center;
-    margin-top: 10px; line-height: 1.4;
+    margin-top: 12px; line-height: 1.5;
   }
 </style>
 </head>
@@ -191,6 +208,7 @@
   <div class="user-bar">
     <input type="text" id="userInput" placeholder="Введите имя..." autocomplete="off">
     <button id="saveBtn">Войти</button>
+    <button id="logoutBtn" class="logout" style="display:none;">Выйти</button>
   </div>
 
   <div class="current-user" id="currentUser">Пользователь не выбран</div>
@@ -207,12 +225,11 @@
   <div class="days" id="days"></div>
 
   <div class="hint">
-    Нажмите на день — отметиться / снять отметку.<br>
-    Долгое нажатие (0.5 сек) — список отметившихся.
+    Тап по дню — список отметившихся.<br>
+    Кнопка +/− в углу — поставить или снять свою отметку.
   </div>
 </div>
 
-<!-- Модальное окно со списком пользователей -->
 <div class="modal-backdrop" id="modalBackdrop">
   <div class="modal">
     <h3 id="modalTitle">Отметились:</h3>
@@ -242,22 +259,25 @@
   const db = getDatabase(app);
 
   // ===== Элементы =====
-  const calendarEl     = document.getElementById('calendar');
-  const monthYear      = document.getElementById('monthYear');
-  const daysEl         = document.getElementById('days');
-  const prevBtn        = document.getElementById('prev');
-  const nextBtn        = document.getElementById('next');
-  const saveBtn        = document.getElementById('saveBtn');
-  const userInput      = document.getElementById('userInput');
-  const currentUserEl  = document.getElementById('currentUser');
+  const calendarEl    = document.getElementById('calendar');
+  const monthYear     = document.getElementById('monthYear');
+  const daysEl        = document.getElementById('days');
+  const prevBtn       = document.getElementById('prev');
+  const nextBtn       = document.getElementById('next');
+  const saveBtn       = document.getElementById('saveBtn');
+  const logoutBtn     = document.getElementById('logoutBtn');
+  const userInput     = document.getElementById('userInput');
+  const currentUserEl = document.getElementById('currentUser');
 
-  const modalBackdrop  = document.getElementById('modalBackdrop');
-  const modalTitle     = document.getElementById('modalTitle');
-  const modalDate      = document.getElementById('modalDate');
-  const modalList      = document.getElementById('modalList');
-  const modalClose     = document.getElementById('modalClose');
+  const modalBackdrop = document.getElementById('modalBackdrop');
+  const modalTitle    = document.getElementById('modalTitle');
+  const modalDate     = document.getElementById('modalDate');
+  const modalList     = document.getElementById('modalList');
+  const modalClose    = document.getElementById('modalClose');
 
   // ===== Состояние =====
+  const STORAGE_KEY = 'calendar_user_name';
+
   const monthNames = [
     'Январь','Февраль','Март','Апрель','Май','Июнь',
     'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'
@@ -267,9 +287,9 @@
   let currentYear  = today.getFullYear();
   let currentMonth = today.getMonth();
 
-  let currentUserId   = null;   // стабильный ключ (encodeURIComponent)
-  let currentUserName = null;   // отображаемое имя
-  let allMarks        = {};     // { "2025-10-10": { userId: name, ... }, ... }
+  let currentUserId   = null;
+  let currentUserName = null;
+  let allMarks        = {};
   let unsubscribe     = null;
 
   // ===== Утилиты =====
@@ -283,7 +303,7 @@
     return name.trim().slice(0, 1).toUpperCase();
   }
 
-  // ===== Рендер календаря =====
+  // ===== Рендер =====
   function renderCalendar() {
     daysEl.innerHTML = '';
     monthYear.textContent = `${monthNames[currentMonth]} ${currentYear}`;
@@ -294,7 +314,7 @@
 
     for (let i = 0; i < offset; i++) {
       const empty = document.createElement('div');
-      empty.classList.add('empty');
+      empty.classList.add('day', 'empty');
       daysEl.appendChild(empty);
     }
 
@@ -306,120 +326,97 @@
       const isMine = currentUserId && users[currentUserId];
 
       const dayEl = document.createElement('div');
-      dayEl.textContent = d;
+      dayEl.className = 'day';
 
-      // «Сегодня»
       if (
         d === today.getDate() &&
         currentMonth === today.getMonth() &&
         currentYear === today.getFullYear()
-      ) {
-        dayEl.classList.add('today');
-      }
+      ) dayEl.classList.add('today');
 
-      // Подсветка
+      if (count > 0) dayEl.classList.add(isMine ? 'mine' : 'has-users');
+
+      const num = document.createElement('div');
+      num.className = 'num';
+      num.textContent = d;
+      dayEl.appendChild(num);
+
       if (count > 0) {
-        dayEl.classList.add(isMine ? 'mine' : 'has-users');
+        const namesBox = document.createElement('div');
+        namesBox.className = 'names';
+        const maxShow = 3;
+        const shown = userIds.slice(0, maxShow);
+        shown.forEach((uid) => {
+          const w = document.createElement('div');
+          w.className = 'who';
+          const full = users[uid];
+          const short = full.split(/\s+/)[0].slice(0, 6);
+          w.textContent = short;
+          namesBox.appendChild(w);
+        });
+        if (count > maxShow) {
+          const more = document.createElement('div');
+          more.className = 'more';
+          more.textContent = `+${count - maxShow}`;
+          namesBox.appendChild(more);
+        }
+        dayEl.appendChild(namesBox);
       }
 
-      // Бейдж с числом
-      if (count > 0) {
-        const badge = document.createElement('span');
-        badge.className = 'badge';
-        badge.textContent = count;
-        dayEl.appendChild(badge);
-      }
-
-      // ==== Обработка нажатий ====
-      let longPressTimer = null;
-      let isLongPress = false;
-      let touched = false;
-
-      const startPress = () => {
-        isLongPress = false;
-        longPressTimer = setTimeout(() => {
-          isLongPress = true;
-          openModal(key, d);
-        }, 500);
-      };
-      const cancelPress = () => {
-        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-      };
-      const endPress = () => {
-        cancelPress();
-        if (isLongPress) return; // уже открыли модалку
+      const toggleBtn = document.createElement('div');
+      toggleBtn.className = 'toggle-btn';
+      toggleBtn.textContent = isMine ? '−' : '+';
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         toggleDay(key);
-      };
-
-      // Touch
-      dayEl.addEventListener('touchstart', (e) => {
-        touched = true;
-        startPress();
-      }, { passive: true });
-      dayEl.addEventListener('touchend', (e) => {
-        endPress();
-      }, { passive: true });
-      dayEl.addEventListener('touchcancel', cancelPress, { passive: true });
-
-      // Mouse (для ПК и как fallback)
-      dayEl.addEventListener('mousedown', () => {
-        if (touched) return;
-        startPress();
       });
-      dayEl.addEventListener('mouseup', () => {
-        if (touched) return;
-        endPress();
-      });
-      dayEl.addEventListener('mouseleave', cancelPress);
+      dayEl.appendChild(toggleBtn);
+
+      dayEl.addEventListener('click', () => openModal(key, d));
 
       daysEl.appendChild(dayEl);
     }
   }
 
-  // ===== Toggle отметки =====
+  // ===== Toggle =====
   function toggleDay(key) {
     if (!currentUserId) return;
     const users = allMarks[key] || {};
-
     if (users[currentUserId]) {
-      // Убираем себя
       remove(ref(db, `days/${key}/${currentUserId}`));
     } else {
-      // Добавляем себя
       set(ref(db, `days/${key}/${currentUserId}`), currentUserName);
     }
-    // onValue сам перерисует
   }
 
-  // ===== Модальное окно =====
+  // ===== Модалка =====
   function openModal(key, dayNumber) {
     const users = allMarks[key] || {};
-    const names = Object.values(users);
+    const entries = Object.entries(users);
 
     const [y, m] = key.split('-');
-    modalTitle.textContent = names.length
-      ? `Отметились (${names.length}):`
+    modalTitle.textContent = entries.length
+      ? `Отметились (${entries.length}):`
       : 'Никто не отметился';
     modalDate.textContent = `${dayNumber} ${monthNames[parseInt(m,10)-1]} ${y}`;
 
     modalList.innerHTML = '';
-    if (names.length === 0) {
+    if (entries.length === 0) {
       const li = document.createElement('li');
       li.textContent = 'Пока никто не отметил этот день';
       li.style.color = '#999';
       modalList.appendChild(li);
     } else {
-      names.forEach((name) => {
+      entries.forEach(([uid, name]) => {
         const li = document.createElement('li');
+        if (uid === currentUserId) li.classList.add('me');
         const av = document.createElement('span');
         av.className = 'avatar';
         av.textContent = initials(name);
         li.appendChild(av);
-        li.appendChild(document.createTextNode(name));
-        if (safeKey(name) === currentUserId) {
-          li.style.background = '#e8f5e9';
-          li.appendChild(document.createTextNode(' (вы)'));
-        }
+        const span = document.createElement('span');
+        span.textContent = name + (uid === currentUserId ? ' (вы)' : '');
+        li.appendChild(span);
         modalList.appendChild(li);
       });
     }
@@ -435,7 +432,7 @@
     if (e.target === modalBackdrop) closeModal();
   });
 
-  // ===== Навигация по месяцам =====
+  // ===== Навигация =====
   function changeMonth(delta) {
     currentMonth += delta;
     if (currentMonth < 0) { currentMonth = 11; currentYear--; }
@@ -445,7 +442,6 @@
   prevBtn.addEventListener('click', () => changeMonth(-1));
   nextBtn.addEventListener('click', () => changeMonth(1));
 
-  // Свайпы
   let tX = 0, tY = 0;
   calendarEl.addEventListener('touchstart', (e) => {
     tX = e.touches[0].clientX;
@@ -459,18 +455,28 @@
     }
   }, { passive: true });
 
-  // ===== Вход пользователя =====
-  function loginUser(name) {
+  // ===== Вход / выход =====
+  function loginUser(name, saveToStorage = true) {
     const clean = name.trim();
     if (!clean) { alert('Введите имя!'); return; }
 
     currentUserId   = safeKey(clean);
     currentUserName = clean;
 
+    // Сохраняем имя в localStorage
+    if (saveToStorage) {
+      try { localStorage.setItem(STORAGE_KEY, clean); } catch (e) {}
+    }
+
+    // Обновляем UI
+    userInput.value = clean;
+    userInput.disabled = true;
+    saveBtn.style.display = 'none';
+    logoutBtn.style.display = 'block';
     currentUserEl.innerHTML = `Пользователь: <b>${clean}</b>`;
     calendarEl.classList.remove('locked');
 
-    // Подписка на все отметки
+    // Подписка на данные
     if (unsubscribe) unsubscribe();
     unsubscribe = onValue(ref(db, 'days'), (snapshot) => {
       allMarks = snapshot.val() || {};
@@ -478,13 +484,40 @@
     });
   }
 
+  function logoutUser() {
+    if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+    currentUserId   = null;
+    currentUserName = null;
+    allMarks        = {};
+
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+
+    userInput.value = '';
+    userInput.disabled = false;
+    saveBtn.style.display = 'block';
+    logoutBtn.style.display = 'none';
+    currentUserEl.textContent = 'Пользователь не выбран';
+    calendarEl.classList.add('locked');
+
+    renderCalendar();
+  }
+
   saveBtn.addEventListener('click', () => loginUser(userInput.value));
   userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') loginUser(userInput.value);
   });
+  logoutBtn.addEventListener('click', logoutUser);
 
-  // ===== Первый рендер =====
-  renderCalendar();
+  // ===== Восстановление пользователя при загрузке =====
+  let savedName = null;
+  try { savedName = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+
+  if (savedName) {
+    userInput.value = savedName;         // показываем имя в инпуте
+    loginUser(savedName, false);         // авто-вход без повторного сохранения
+  } else {
+    renderCalendar();
+  }
 </script>
 
 </body>
