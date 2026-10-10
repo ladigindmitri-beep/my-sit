@@ -48,12 +48,57 @@
   .days .day .num { font-size: 18px; font-weight: 700; line-height: 1.1; }
   .days .day.mine .num { color: white; }
   .days .day.has-users .num { color: #1b5e20; }
+
   .days .day .names { margin-top: 1px; display: flex; flex-direction: column; align-items: center; gap: 1px; width: 100%; padding: 0 2px; overflow: hidden; }
   .days .day .names .who { font-size: 9px; line-height: 1.1; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.9; }
   .days .day.mine .names .who { color: #e8f5e9; }
   .days .day.has-users .names .who { color: #2e7d32; }
   .days .day .more { font-size: 9px; font-weight: 800; opacity: 0.75; }
-  .days .day .toggle-btn { position: absolute; bottom: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,0.85); color: #333; font-size: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.2); line-height: 1; pointer-events: auto; transition: transform 0.1s, background 0.15s; }
+
+  /* === МЕТКА С КОЛИЧЕСТВОМ (правый верхний угол) === */
+  .days .day .count-badge {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    background: #ff5722;
+    color: white;
+    font-size: 13px;
+    font-weight: 800;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    line-height: 1;
+    z-index: 2;
+  }
+  .days .day.mine .count-badge { background: #d32f2f; }
+
+  /* === УВЕЛИЧЕННАЯ КНОПКА +/- (нижний правый угол) === */
+  .days .day .toggle-btn {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.95);
+    color: #333;
+    font-size: 26px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    line-height: 1;
+    pointer-events: auto;
+    transition: transform 0.1s, background 0.15s;
+    padding-bottom: 2px;
+    z-index: 2;
+  }
   .days .day .toggle-btn:active { transform: scale(0.85); background: white; }
   .days .day.mine .toggle-btn { background: #d32f2f; color: white; }
 
@@ -222,8 +267,8 @@
   const today = new Date();
   let currentYear = today.getFullYear();
   let currentMonth = today.getMonth();
-  let currentWorkshop = null; // { name, key }
-  let currentUser = null;     // { name, key }
+  let currentWorkshop = null;
+  let currentUser = null;
   let allMarks = {};
   let unsubscribe = null;
 
@@ -475,10 +520,19 @@
       num.textContent = d;
       dayEl.appendChild(num);
 
+      // === МЕТКА С КОЛИЧЕСТВОМ В ПРАВОМ ВЕРХНЕМ УГЛУ ===
+      if (count > 0) {
+        const badge = document.createElement('div');
+        badge.className = 'count-badge';
+        badge.textContent = count;
+        dayEl.appendChild(badge);
+      }
+
+      // Имена (максимум 1, чтобы не мешали метке)
       if (count > 0) {
         const namesBox = document.createElement('div');
         namesBox.className = 'names';
-        const maxShow = 3;
+        const maxShow = 1;
         userIds.slice(0, maxShow).forEach((uid) => {
           const w = document.createElement('div');
           w.className = 'who';
@@ -494,6 +548,7 @@
         dayEl.appendChild(namesBox);
       }
 
+      // Большая кнопка +/-
       const toggleBtn = document.createElement('div');
       toggleBtn.className = 'toggle-btn';
       toggleBtn.textContent = isMine ? '−' : '+';
