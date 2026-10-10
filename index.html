@@ -4,12 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#4CAF50">
-<title>Календарь</title>
+<title>Календарь с базой данных</title>
 <style>
-  * {
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
   html, body {
     margin: 0;
@@ -38,6 +35,51 @@
     max-width: 100%;
   }
 
+  /* Блок пользователя */
+  .user-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    align-items: center;
+  }
+
+  .user-bar input {
+    flex: 1;
+    padding: 14px;
+    font-size: 18px;
+    border: 2px solid #ddd;
+    border-radius: 12px;
+    outline: none;
+    transition: border 0.15s;
+  }
+
+  .user-bar input:focus { border-color: #4CAF50; }
+
+  .user-bar button {
+    padding: 14px 20px;
+    font-size: 18px;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    background: #4CAF50;
+    color: white;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.15s, transform 0.1s;
+  }
+
+  .user-bar button:active { background: #388e3c; transform: scale(0.95); }
+
+  .current-user {
+    font-size: 15px;
+    color: #666;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+
+  .current-user b { color: #2e7d32; }
+
+  /* Заголовок календаря */
   .header {
     display: flex;
     justify-content: space-between;
@@ -76,10 +118,7 @@
     font-weight: 700;
   }
 
-  .header button:active {
-    background: #388e3c;
-    transform: scale(0.9);
-  }
+  .header button:active { background: #388e3c; transform: scale(0.9); }
 
   .weekdays, .days {
     display: grid;
@@ -119,11 +158,7 @@
     background: #d0d0d0;
   }
 
-  .days div.empty {
-    background: transparent;
-    cursor: default;
-    pointer-events: none;
-  }
+  .days div.empty { background: transparent; pointer-events: none; }
 
   .days div.today {
     border: 3px solid #4CAF50;
@@ -138,71 +173,118 @@
     box-shadow: 0 4px 12px rgba(76,175,80,0.4);
   }
 
-  .days div.selected:active {
-    background: #388e3c;
+  .days div.selected:active { background: #388e3c; }
+
+  /* Блокировка календаря, пока не вошёл пользователь */
+  .calendar.locked .header,
+  .calendar.locked .weekdays,
+  .calendar.locked .days {
+    opacity: 0.4;
+    pointer-events: none;
   }
 
-  /* Очень маленькие экраны — сохраняем крупный размер */
-  @media (max-width: 360px) {
-    body { padding: 6px; }
-    .calendar { padding: 12px; border-radius: 16px; }
-    .header h2 { font-size: 20px; }
-    .header button { width: 52px; height: 52px; min-width: 52px; font-size: 28px; }
-    .weekdays div { font-size: 14px; padding: 6px 0; }
-    .days div { font-size: 19px; border-radius: 12px; min-height: 44px; }
-    .weekdays, .days { gap: 4px; }
+  /* Список записей (можно удалить, если не нужен) */
+  .records {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #eee;
   }
-
-  /* Ландшафт — уменьшаем только по высоте */
-  @media (orientation: landscape) and (max-height: 500px) {
-    body { padding: 6px; align-items: center; }
-    .calendar { padding: 10px; }
-    .header { margin-bottom: 8px; }
-    .header h2 { font-size: 18px; }
-    .header button { width: 46px; height: 46px; min-width: 46px; font-size: 24px; }
-    .weekdays div { padding: 3px 0; font-size: 13px; }
-    .days div { font-size: 16px; border-radius: 8px; min-height: 36px; }
-    .weekdays, .days { gap: 3px; }
+  .records h3 { margin: 0 0 10px; font-size: 16px; color: #444; }
+  .records ul { list-style: none; padding: 0; margin: 0; }
+  .records li {
+    background: #f7f7f7;
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin-bottom: 6px;
+    font-size: 15px;
   }
 </style>
 </head>
 <body>
 
-<div class="calendar">
+<div class="calendar locked" id="calendar">
+  <div class="user-bar">
+    <input type="text" id="userInput" placeholder="Введите имя..." autocomplete="off">
+    <button id="saveBtn">Войти</button>
+  </div>
+
+  <div class="current-user" id="currentUser">Пользователь не выбран</div>
+
   <div class="header">
     <button id="prev" aria-label="Предыдущий месяц">‹</button>
     <h2 id="monthYear"></h2>
     <button id="next" aria-label="Следующий месяц">›</button>
   </div>
+
   <div class="weekdays">
     <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div>
   </div>
   <div class="days" id="days"></div>
+
+  <div class="records">
+    <h3>Сохранённые записи:</h3>
+    <ul id="dataList"><li>Нет данных...</li></ul>
+  </div>
 </div>
 
-<script>
+<script type="module">
+  // ===== Firebase =====
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
+  import { getDatabase, ref, push, onValue, set, remove }
+    from "https://www.gstatic.com/firebasejs/13.0.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBiu5vKO9khr9Ftru3lFC8xEj6zKZSj6o4",
+    authDomain: "my-sit-d3ef5.firebaseapp.com",
+    databaseURL: "https://my-sit-d3ef5-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "my-sit-d3ef5",
+    storageBucket: "my-sit-d3ef5.firebasestorage.app",
+    messagingSenderId: "483741682455",
+    appId: "1:483741682455:web:3c6ad2d39e97a687ab4552"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // ===== Элементы =====
+  const calendarEl = document.getElementById('calendar');
   const monthYear = document.getElementById('monthYear');
   const daysEl = document.getElementById('days');
   const prevBtn = document.getElementById('prev');
   const nextBtn = document.getElementById('next');
 
+  const saveBtn = document.getElementById('saveBtn');
+  const userInput = document.getElementById('userInput');
+  const currentUserEl = document.getElementById('currentUser');
+  const dataList = document.getElementById('dataList');
+
+  // ===== Состояние =====
   const monthNames = [
-    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+    'Январь','Февраль','Март','Апрель','Май','Июнь',
+    'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'
   ];
 
   const today = new Date();
   let currentYear = today.getFullYear();
   let currentMonth = today.getMonth();
 
-  const selectedDays = new Set();
+  let currentUser = null;          // имя пользователя
+  let selectedDays = new Set();    // выбранные дни
+  let daysRef = null;              // ссылка на onValue, чтобы отписываться
+  let unsubscribe = null;
+
+  // ===== Функции =====
+  function safeKey(name) {
+    // Firebase не разрешает . # $ [ ] / — заменяем
+    return encodeURIComponent(name.trim().toLowerCase());
+  }
 
   function renderCalendar() {
     daysEl.innerHTML = '';
     monthYear.textContent = `${monthNames[currentMonth]} ${currentYear}`;
 
     const firstDay = new Date(currentYear, currentMonth, 1).getDay();
-    const offset = (firstDay === 0) ? 6 : firstDay - 1;
+    const offset = firstDay === 0 ? 6 : firstDay - 1;
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
     for (let i = 0; i < offset; i++) {
@@ -214,7 +296,7 @@
     for (let d = 1; d <= daysInMonth; d++) {
       const dayEl = document.createElement('div');
       dayEl.textContent = d;
-      const key = `${currentYear}-${currentMonth}-${d}`;
+      const key = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
       if (
         d === today.getDate() &&
@@ -224,31 +306,25 @@
         dayEl.classList.add('today');
       }
 
-      if (selectedDays.has(key)) {
-        dayEl.classList.add('selected');
-      }
+      if (selectedDays.has(key)) dayEl.classList.add('selected');
 
+      let touched = false;
       const toggle = () => {
+        if (!currentUser) return; // защита
         if (selectedDays.has(key)) {
           selectedDays.delete(key);
           dayEl.classList.remove('selected');
+          if (daysRef) remove(ref(db, `users/${currentUser}/days/${key}`));
         } else {
           selectedDays.add(key);
           dayEl.classList.add('selected');
+          if (daysRef) set(ref(db, `users/${currentUser}/days/${key}`), true);
         }
       };
 
-      let touched = false;
-      dayEl.addEventListener('touchstart', () => {
-        touched = true;
-        toggle();
-      }, { passive: true });
-
+      dayEl.addEventListener('touchstart', () => { touched = true; toggle(); }, { passive: true });
       dayEl.addEventListener('click', () => {
-        if (touched) {
-          touched = false;
-          return;
-        }
+        if (touched) { touched = false; return; }
         toggle();
       });
 
@@ -256,40 +332,83 @@
     }
   }
 
-  // Свайпы
-  let touchStartX = 0;
-  let touchStartY = 0;
-  const calendarEl = document.querySelector('.calendar');
+  function changeMonth(delta) {
+    currentMonth += delta;
+    if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+    else if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+    renderCalendar();
+  }
 
+  // ===== Работа с пользователем =====
+  function loginUser(name) {
+    const clean = name.trim();
+    if (!clean) { alert('Введите имя!'); return; }
+
+    // Если уже был другой пользователь — отписываемся
+    if (unsubscribe) unsubscribe();
+
+    currentUser = safeKey(clean);
+    selectedDays = new Set();
+    currentUserEl.innerHTML = `Пользователь: <b>${clean}</b>`;
+    calendarEl.classList.remove('locked');
+
+    // Сохраняем имя пользователя для удобства
+    push(ref(db, 'records'), {
+      text: `Вход: ${clean}`,
+      timestamp: Date.now()
+    });
+
+    // Подписка на дни пользователя в реальном времени
+    daysRef = ref(db, `users/${currentUser}/days`);
+    unsubscribe = onValue(daysRef, (snapshot) => {
+      selectedDays = new Set();
+      const data = snapshot.val();
+      if (data) {
+        Object.keys(data).forEach(k => selectedDays.add(k));
+      }
+      renderCalendar();
+    });
+
+    // Список записей (можно оставить как журнал входов)
+    onValue(ref(db, 'records'), (snapshot) => {
+      dataList.innerHTML = '';
+      const data = snapshot.val();
+      if (data) {
+        Object.values(data).slice(-20).reverse().forEach((item) => {
+          const li = document.createElement('li');
+          const dt = new Date(item.timestamp);
+          li.textContent = `${item.text} — ${dt.toLocaleString('ru-RU')}`;
+          dataList.appendChild(li);
+        });
+      } else {
+        dataList.innerHTML = '<li>Нет записей</li>';
+      }
+    });
+  }
+
+  saveBtn.addEventListener('click', () => loginUser(userInput.value));
+  userInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loginUser(userInput.value); });
+
+  // ===== Кнопки навигации =====
+  prevBtn.addEventListener('click', () => changeMonth(-1));
+  nextBtn.addEventListener('click', () => changeMonth(1));
+
+  // ===== Свайпы =====
+  let tX = 0, tY = 0;
   calendarEl.addEventListener('touchstart', (e) => {
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
+    tX = e.touches[0].clientX;
+    tY = e.touches[0].clientY;
   }, { passive: true });
 
   calendarEl.addEventListener('touchend', (e) => {
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    const dy = e.changedTouches[0].clientY - touchStartY;
-
+    const dx = e.changedTouches[0].clientX - tX;
+    const dy = e.changedTouches[0].clientY - tY;
     if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) {
       changeMonth(dx > 0 ? -1 : 1);
     }
   }, { passive: true });
 
-  function changeMonth(delta) {
-    currentMonth += delta;
-    if (currentMonth < 0) {
-      currentMonth = 11;
-      currentYear--;
-    } else if (currentMonth > 11) {
-      currentMonth = 0;
-      currentYear++;
-    }
-    renderCalendar();
-  }
-
-  prevBtn.addEventListener('click', () => changeMonth(-1));
-  nextBtn.addEventListener('click', () => changeMonth(1));
-
+  // ===== Первый рендер =====
   renderCalendar();
 </script>
 
