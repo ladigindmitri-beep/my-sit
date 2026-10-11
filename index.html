@@ -324,6 +324,34 @@
   .center { text-align: center; }
   .loading { text-align: center; padding: 40px 10px; color: #888; font-size: 15px; }
 
+  /* ===== Копирование номера ===== */
+  .copyable { cursor: pointer; }
+  .copyable:active { opacity: 0.6; }
+
+  .copy-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #323232;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 999;
+    max-width: 90vw;
+    text-align: center;
+  }
+  .copy-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
   @media (min-width: 560px) {
     .header h2 { font-size: 24px; }
     .header button { width: 56px; height: 56px; min-width: 56px; font-size: 30px; }
@@ -482,6 +510,8 @@
   </div>
 </div>
 
+<div class="copy-toast" id="copyToast">Скопировано</div>
+
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
   import { getDatabase, ref, onValue, set, remove, get, child, push, update }
@@ -542,6 +572,39 @@
   const digitsOnly = s => (s || '').replace(/\D/g, '');
   const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const formatTime = ts => { if (!ts) return ''; const d = new Date(ts); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); };
+
+  // ===== Копирование в буфер обмена =====
+  let copyToastTimer = null;
+  function showCopyToast(text) {
+    const t = document.getElementById('copyToast');
+    t.textContent = text || 'Скопировано';
+    t.classList.add('show');
+    if (copyToastTimer) clearTimeout(copyToastTimer);
+    copyToastTimer = setTimeout(() => t.classList.remove('show'), 1400);
+  }
+
+  async function copyPhone(rawDigits) {
+    if (!rawDigits) return;
+    const pretty = formatPhone(rawDigits);
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(pretty);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = pretty;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showCopyToast('📱 ' + pretty + ' скопирован');
+    } catch (e) {
+      console.error(e);
+      showCopyToast('Не удалось скопировать');
+    }
+  }
 
   async function sha256(text) {
     const data = new TextEncoder().encode(text);
@@ -610,7 +673,13 @@
     if (currentUser.phone_fmt) {
       loggedPhone.classList.remove('hidden');
       loggedPhone.textContent = '📱 ' + currentUser.phone_fmt;
-    } else loggedPhone.classList.add('hidden');
+      loggedPhone.classList.add('copyable');
+      loggedPhone.onclick = () => copyPhone(currentUser.phone);
+      loggedPhone.title = 'Нажмите, чтобы скопировать';
+    } else {
+      loggedPhone.classList.add('hidden');
+      loggedPhone.onclick = null;
+    }
 
     subscribeMarks();
     subscribeMsgCounts();
@@ -636,7 +705,6 @@
       if (userKey && userJson) {
         try {
           const u = JSON.parse(userJson);
-          // проверяем, что юзер существует в Firebase
           const snap = await get(child(ref(db), `workshops/${wsKey}/users/${userKey}`));
           if (snap.exists()) {
             const data = snap.val();
@@ -976,8 +1044,15 @@
     infoBox.appendChild(n);
 
     const ph = document.createElement('div');
-    if (info.phone) { ph.className = 'u-phone'; ph.textContent = '📱 ' + formatPhone(info.phone); }
-    else { ph.className = 'u-phone empty'; ph.textContent = 'телефон не указан'; }
+    if (info.phone) {
+      ph.className = 'u-phone copyable';
+      ph.textContent = '📱 ' + formatPhone(info.phone);
+      ph.title = 'Нажмите, чтобы скопировать';
+      ph.addEventListener('click', (e) => { e.stopPropagation(); copyPhone(info.phone); });
+    } else {
+      ph.className = 'u-phone empty';
+      ph.textContent = 'телефон не указан';
+    }
     infoBox.appendChild(ph);
 
     if (info.maxUsername) {
@@ -1123,7 +1198,14 @@
       const who = document.createElement('span'); who.className = 'who';
       who.textContent = (m.role === 'admin' ? '👑 ' : '') + m.userName;
       meta.appendChild(who);
-      if (m.phone) { const ph = document.createElement('span'); ph.textContent = '· ' + formatPhone(m.phone); meta.appendChild(ph); }
+      if (m.phone) {
+        const ph = document.createElement('span');
+        ph.className = 'copyable';
+        ph.textContent = '· ' + formatPhone(m.phone);
+        ph.title = 'Нажмите, чтобы скопировать';
+        ph.addEventListener('click', (e) => { e.stopPropagation(); copyPhone(m.phone); });
+        meta.appendChild(ph);
+      }
       if (m.maxUsername) { const mx = document.createElement('span'); mx.textContent = '· MAX: ' + m.maxUsername; meta.appendChild(mx); }
       const t = document.createElement('span'); t.textContent = '· ' + formatTime(m.createdAt); meta.appendChild(t);
       el.appendChild(meta);
