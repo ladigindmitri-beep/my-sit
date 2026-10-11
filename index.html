@@ -7,206 +7,484 @@
 <title>Календарь цеха</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; padding: 0; min-height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f0f0f0; overflow-x: hidden; }
-  body { display: flex; justify-content: center; align-items: flex-start; padding: 10px; padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-  .calendar { background: #fff; border-radius: 20px; box-shadow: 0 6px 24px rgba(0,0,0,0.15); padding: 16px; width: 100%; max-width: 100%; }
-  
-  /* Авторизация */
+  html, body { margin: 0; padding: 0; min-height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #f0f0f0; overflow-x: hidden; }
+  body { display: flex; justify-content: center; align-items: flex-start; padding: 10px;
+    padding-top: max(10px, env(safe-area-inset-top));
+    padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  .calendar { background: #fff; border-radius: 20px; box-shadow: 0 6px 24px rgba(0,0,0,0.15);
+    padding: 16px; width: 100%; max-width: 100%; }
+
+  /* ============ Авторизация ============ */
   .auth h3 { margin: 4px 0 12px; font-size: 18px; color: #222; text-align: center; }
   .auth .form-row { display: flex; gap: 8px; margin-bottom: 10px; }
-  .auth .form-row input, .auth select { flex: 1; padding: 14px; font-size: 18px; border: 2px solid #ddd; border-radius: 12px; outline: none; transition: border 0.15s; width: 100%; }
-  .auth .form-row input:focus, .auth select:focus { border-color: #4CAF50; }
-  .auth .btn-primary { width: 100%; padding: 14px; font-size: 18px; font-weight: 700; border: none; border-radius: 12px; background: #4CAF50; color: white; cursor: pointer; touch-action: manipulation; transition: background 0.15s, transform 0.1s; margin-bottom: 8px; }
-  .auth .btn-primary:active { background: #388e3c; transform: scale(0.97); }
-  .auth .btn-secondary { width: 100%; padding: 12px; font-size: 16px; font-weight: 700; border: 2px solid #4CAF50; border-radius: 12px; background: white; color: #2e7d32; cursor: pointer; margin-top: 4px; }
-  .auth .btn-link { width: 100%; padding: 8px; background: none; border: none; color: #1976d2; font-size: 14px; cursor: pointer; text-decoration: underline; }
+  .auth .form-row input { flex: 1; padding: 14px; font-size: 18px;
+    border: 2px solid #ddd; border-radius: 12px; outline: none; min-width: 0; }
+  .auth .form-row input:focus { border-color: #4CAF50; }
+  .auth .btn-primary { width: 100%; padding: 14px; font-size: 18px; font-weight: 700;
+    border: none; border-radius: 12px; background: #4CAF50; color: white; cursor: pointer; margin-bottom: 8px; }
+  .auth .btn-primary:active { background: #388e3c; }
+  .auth .btn-secondary { width: 100%; padding: 12px; margin-top: 8px; font-size: 16px; font-weight: 700;
+    border: 2px solid #4CAF50; border-radius: 12px; background: white; color: #2e7d32; cursor: pointer; }
+  .auth .btn-link { width: 100%; padding: 8px; background: none; border: none;
+    color: #1976d2; font-size: 14px; cursor: pointer; text-decoration: underline; }
   .auth .hint { font-size: 13px; color: #888; text-align: center; margin-top: 8px; min-height: 16px; }
   .auth .hint.error { color: #d32f2f; font-weight: 600; }
+  .auth select { width: 100%; padding: 14px; font-size: 18px; border: 2px solid #ddd;
+    border-radius: 12px; outline: none; background: white; margin-bottom: 10px; }
+  .auth select:focus { border-color: #4CAF50; }
 
-  /* Вошедший */
-  .logged-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 12px; background: #e8f5e9; border-radius: 12px; }
-  .logged-bar .info { display: flex; flex-direction: column; overflow: hidden; }
-  .logged-bar .name { font-size: 16px; color: #1b5e20; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .logged-bar .ws { font-size: 12px; color: #558b2f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .logged-bar button { padding: 8px 14px; font-size: 14px; font-weight: 700; border: none; border-radius: 10px; background: #ff5722; color: white; cursor: pointer; touch-action: manipulation; white-space: nowrap; }
+  /* ============ Панель вошедшего ============ */
+  .logged-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    margin-bottom: 14px; padding: 10px 12px; background: #e8f5e9; border-radius: 12px; }
+  .logged-bar.admin { background: #fff8e1; border: 1px solid #ffe082; }
+  .logged-bar .info { display: flex; flex-direction: column; overflow: hidden; min-width: 0; flex: 1; }
+  .logged-bar .name { font-size: 16px; color: #1b5e20; font-weight: 700;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .logged-bar.admin .name { color: #8d6e00; }
+  .logged-bar .ws { font-size: 12px; color: #558b2f;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .logged-bar.admin .ws { color: #9e7a00; }
+  .logged-bar .my-phone { font-size: 12px; color: #1b5e20; font-weight: 700; margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .logged-bar.admin .my-phone { color: #8d6e00; }
+  .logged-bar button { padding: 8px 14px; font-size: 14px; font-weight: 700;
+    border: none; border-radius: 10px; background: #ff5722; color: white; cursor: pointer;
+    flex-shrink: 0; }
 
-  /* Календарь */
-  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; }
-  .header h2 { margin: 0; font-size: 24px; font-weight: 700; text-align: center; flex: 1; color: #222; white-space: nowrap; }
-  .header button { background: #4CAF50; border: none; color: white; font-size: 32px; width: 60px; height: 60px; min-width: 60px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; font-weight: 700; touch-action: manipulation; }
-  .header button:active { background: #388e3c; transform: scale(0.9); }
+  /* ============ Шапка месяца ============ */
+  .header { display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; gap: 8px; }
+  .header h2 { margin: 0; font-size: 22px; font-weight: 700; text-align: center;
+    flex: 1; color: #222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header button { background: #4CAF50; border: none; color: white; font-size: 26px;
+    width: 48px; height: 48px; min-width: 48px; border-radius: 50%; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; padding: 0;
+    line-height: 1; font-weight: 700; flex-shrink: 0; }
+  .header button:active { background: #388e3c; }
 
-  .weekdays, .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-  .weekdays div { text-align: center; font-weight: 700; color: #666; font-size: 16px; padding: 8px 0; user-select: none; }
+  /* ============ Календарь ============ */
+  .weekdays, .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; }
+  .weekdays div { text-align: center; font-weight: 700; color: #666;
+    font-size: 14px; padding: 6px 0; user-select: none; }
+  .days-wrap { padding: 0 12px 12px; margin: 0 -12px; }
 
-  .days .day { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; aspect-ratio: 1 / 1; min-height: 60px; border-radius: 14px; cursor: pointer; user-select: none; background: #f5f5f5; color: #222; padding: 4px 3px 2px; transition: background 0.15s, color 0.15s, transform 0.1s; touch-action: manipulation; overflow: hidden; }
-  .days .day:active { transform: scale(0.94); }
-  .days .day.empty { background: transparent; pointer-events: none; }
-  .days .day.today { border: 3px solid #4CAF50; }
-  .days .day.has-users { background: #c8e6c9; color: #1b5e20; }
-  .days .day.mine { background: #4CAF50; color: white; box-shadow: 0 4px 12px rgba(76,175,80,0.4); }
-  .days .day .num { font-size: 18px; font-weight: 700; line-height: 1.1; }
-  .days .day.mine .num { color: white; }
-  .days .day.has-users .num { color: #1b5e20; }
-
-  .days .day .names { margin-top: 1px; display: flex; flex-direction: column; align-items: center; gap: 1px; width: 100%; padding: 0 2px; overflow: hidden; }
-  .days .day .names .who { font-size: 9px; line-height: 1.1; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.9; }
-  .days .day.mine .names .who { color: #e8f5e9; }
-  .days .day.has-users .names .who { color: #2e7d32; }
-  .days .day .more { font-size: 9px; font-weight: 800; opacity: 0.75; }
-
-  /* === МЕТКА С КОЛИЧЕСТВОМ (правый верхний угол) === */
-  .days .day .count-badge {
-    position: absolute;
-    top: 3px;
-    right: 3px;
-    background: #ff5722;
-    color: white;
-    font-size: 13px;
-    font-weight: 800;
-    min-width: 22px;
-    height: 22px;
-    padding: 0 4px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-    line-height: 1;
-    z-index: 2;
+  .days .day {
+    position: relative;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-height: 96px;
+    border-radius: 12px;
+    cursor: pointer; user-select: none;
+    background: #f5f5f5; color: #222;
+    padding: 30px 6px 30px;
+    overflow: visible;
+    transition: background 0.15s;
+    z-index: 1;
   }
-  .days .day.mine .count-badge { background: #d32f2f; }
+  .days .day.empty { background: transparent; pointer-events: none; }
+  .days .day.today { border: 2px solid #4CAF50; }
+  .days .day.has-users { background: #c8e6c9; color: #1b5e20; }
+  .days .day.has-pending { background: #fff3cd; color: #856404; }
+  .days .day.mine { background: #4CAF50; color: white; }
+  .days .day.mine-pending { background: #ffc107; color: #5d4200; }
 
-  /* === УВЕЛИЧЕННАЯ КНОПКА +/- (нижний правый угол) === */
+  .days .day .num {
+    position: absolute;
+    top: 6px; left: 8px;
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .days .day .top-right {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex; align-items: center; justify-content: center;
+    gap: 4px;
+    z-index: 2;
+    pointer-events: none;
+    max-width: 100%;
+  }
+  .days .day .people-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 2px;
+    min-width: 28px; height: 28px;
+    padding: 0 8px;
+    border-radius: 14px;
+    background: #2e7d32;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 1;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.22);
+  }
+  .days .day .people-count .u { font-size: 10px; font-weight: 700; opacity: 0.85; margin-left: 1px; }
+  .days .day .people-count.zero { background: #e0e0e0; color: #999; box-shadow: none; font-size: 13px; }
+  .days .day.mine .people-count { background: #fff; color: #2e7d32; }
+  .days .day.has-pending .people-count { background: #856404; }
+  .days .day.mine-pending .people-count { background: #5d4200; }
+
+  .days .day .pend-badge {
+    min-width: 24px; height: 24px;
+    padding: 0 6px;
+    border-radius: 12px;
+    background: #ff9800;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    line-height: 1;
+  }
+  .days .day .pend-badge.admin { background: #e91e63; }
+
+  .days .day .names {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+    padding: 0 2px;
+    margin-top: 34px;
+    overflow: hidden;
+    position: absolute;
+    bottom: 6px; left: 0;
+  }
+  .days .day .names .who {
+    font-size: 12px; line-height: 1.15; font-weight: 700;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 1px 6px; border-radius: 6px;
+    background: rgba(255,255,255,0.6); color: #1b5e20;
+  }
+  .days .day.mine .names .who { background: rgba(255,255,255,0.28); color: #fff; }
+  .days .day.has-users .names .who { background: rgba(255,255,255,0.7); color: #2e7d32; }
+  .days .day.mine-pending .names .who { background: rgba(255,255,255,0.55); color: #5d4200; }
+  .days .day.has-pending .names .who { background: rgba(255,255,255,0.8); color: #856404; }
+  .days .day .more { font-size: 12px; font-weight: 800; opacity: 0.9;
+    padding: 1px 8px; border-radius: 6px;
+    background: rgba(255,255,255,0.65); color: #1b5e20; }
+  .days .day.mine .more { background: rgba(255,255,255,0.3); color: white; }
+  .days .day.mine-pending .more { background: rgba(255,255,255,0.4); color: #5d4200; }
+  .days .day.has-pending .more { background: rgba(255,255,255,0.8); color: #856404; }
+
+  .days .day .dots {
+    display: none;
+    gap: 4px;
+    justify-content: center;
+    position: absolute;
+    bottom: 10px; left: 50%;
+    transform: translateX(-50%);
+    max-width: 100%;
+  }
+  .days .day .dots .dot { width: 7px; height: 7px; border-radius: 50%; background: #4CAF50; flex-shrink: 0; }
+  .days .day .dots .dot.pending { background: #ff9800; }
+  .days .day .dots .dot.rejected { background: #f44336; }
+
   .days .day .toggle-btn {
     position: absolute;
-    bottom: 5px;
-    right: 5px;
-    width: 34px;
-    height: 34px;
+    bottom: -10px; left: -10px;
+    width: 38px; height: 38px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.95);
+    background: #fff;
     color: #333;
-    font-size: 26px;
-    font-weight: 800;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    line-height: 1;
-    pointer-events: auto;
-    transition: transform 0.1s, background 0.15s;
-    padding-bottom: 2px;
-    z-index: 2;
+    font-size: 24px;
+    font-weight: 900;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    line-height: 1; padding-bottom: 3px;
+    border: 3px solid #fff;
+    transition: transform 0.08s;
+    z-index: 5;
   }
-  .days .day .toggle-btn:active { transform: scale(0.85); background: white; }
-  .days .day.mine .toggle-btn { background: #d32f2f; color: white; }
+  .days .day .toggle-btn:active { transform: scale(0.85); }
+  .days .day.mine .toggle-btn { background: #d32f2f; color: white; box-shadow: 0 4px 10px rgba(211,47,47,0.5); }
+  .days .day.mine-pending .toggle-btn { background: #ff9800; color: white; box-shadow: 0 4px 10px rgba(255,152,0,0.5); }
 
-  /* Модалка */
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
+  .days .day .chat-btn {
+    position: absolute;
+    top: 5px; right: 5px;
+    min-width: 30px; height: 30px;
+    padding: 0 7px;
+    border-radius: 15px;
+    background: rgba(255,255,255,0.95);
+    color: #1976d2;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    gap: 2px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.18);
+    line-height: 1;
+    transition: transform 0.08s;
+    z-index: 3;
+  }
+  .days .day .chat-btn:active { transform: scale(0.85); }
+  .days .day .chat-btn.has-msg { background: #1976d2; color: #fff; box-shadow: 0 2px 4px rgba(25,118,210,0.4); }
+  .days .day .chat-btn .badge { font-size: 11px; font-weight: 900; }
+
+  /* ============ Модалка ============ */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: none; align-items: center; justify-content: center;
+    padding: 8px; z-index: 100; }
   .modal-backdrop.open { display: flex; }
-  .modal { background: white; border-radius: 18px; padding: 20px; width: 100%; max-width: 360px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); animation: pop 0.15s ease-out; }
-  @keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  .modal h3 { margin: 0 0 6px; font-size: 18px; color: #222; }
-  .modal .date-label { font-size: 14px; color: #888; margin-bottom: 12px; }
-  .modal ul { list-style: none; padding: 0; margin: 0 0 16px; max-height: 260px; overflow-y: auto; }
-  .modal li { padding: 10px 12px; background: #f5f5f5; border-radius: 10px; margin-bottom: 6px; font-size: 16px; display: flex; align-items: center; gap: 10px; }
-  .modal li.me { background: #e8f5e9; }
-  .modal li .avatar { width: 32px; height: 32px; border-radius: 50%; background: #4CAF50; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
-  .modal .btn-close { width: 100%; padding: 14px; background: #4CAF50; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
-  .modal .btn-close:active { background: #388e3c; }
+  .modal { background: white; border-radius: 18px; width: 100%; max-width: 640px;
+    height: 92vh; max-height: 92vh; box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    animation: pop 0.15s ease-out; display: flex; flex-direction: column; overflow: hidden; }
+  @keyframes pop { from { transform: scale(0.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .modal-header { padding: 14px 56px 10px 16px; border-bottom: 1px solid #eee; flex-shrink: 0; position: relative; }
+  .modal-header h3 { margin: 0 0 4px; font-size: 20px; color: #222; }
+  .modal-header .date-label { font-size: 14px; color: #888; }
+  .modal-header .close-x { position: absolute; top: 10px; right: 10px; width: 38px; height: 38px;
+    border: none; border-radius: 50%; background: #f0f0f0; color: #555; font-size: 22px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .modal-header .close-x:active { background: #e0e0e0; }
+  .modal-body { flex: 1 1 auto; overflow-y: auto; padding: 12px 16px; background: #fafafa; }
+
+  .section-title { font-size: 13px; font-weight: 700; color: #666; text-transform: uppercase;
+    letter-spacing: 0.5px; margin: 10px 0 8px; display: flex; align-items: center; gap: 8px; }
+  .section-title:first-child { margin-top: 0; }
+  .section-title .cnt { background: #eee; color: #555; border-radius: 8px; padding: 1px 8px; font-size: 11px; }
+
+  .users-list { list-style: none; padding: 0; margin: 0 0 12px;
+    display: flex; flex-direction: column; gap: 6px; }
+  .users-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    background: white; border: 1px solid #e0e0e0; border-radius: 12px;
+    font-size: 15px; color: #333; flex-wrap: wrap; }
+  .users-list li.me { background: #e8f5e9; border-color: #a5d6a7; color: #1b5e20; }
+  .users-list li.approved { background: #e8f5e9; border-color: #a5d6a7; }
+  .users-list li.pending { background: #fff8e1; border-color: #ffe082; }
+  .users-list li.rejected { background: #fce4ec; border-color: #f8bbd0; opacity: 0.8; }
+  .users-list li .avatar { width: 34px; height: 34px; border-radius: 50%;
+    background: #4CAF50; color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 15px; flex-shrink: 0; }
+  .users-list li.pending .avatar { background: #ff9800; }
+  .users-list li.rejected .avatar { background: #e91e63; }
+  .users-list li .u-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .users-list li .u-name { font-weight: 700; font-size: 15px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .users-list li .u-name .crown { color: #ffa000; }
+  .users-list li .u-phone { font-size: 13px; color: #666; font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .users-list li .u-phone.empty { color: #bbb; font-style: italic; }
+  .users-list li .status-badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .users-list li .status-badge.approved { background: #c8e6c9; color: #1b5e20; }
+  .users-list li .status-badge.pending { background: #ffe082; color: #856404; }
+  .users-list li .status-badge.rejected { background: #f8bbd0; color: #880e4f; }
+  .users-list li .actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
+  .users-list li .btn-approve, .users-list li .btn-reject {
+    display: inline-flex; align-items: center; gap: 4px; padding: 8px 12px;
+    border: none; border-radius: 999px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .users-list li .btn-approve { background: #4CAF50; color: white; }
+  .users-list li .btn-approve:active { background: #388e3c; }
+  .users-list li .btn-reject { background: #f44336; color: white; }
+  .users-list li .btn-reject:active { background: #d32f2f; }
+  .users-list li .max-btn {
+    display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px;
+    border: none; border-radius: 999px; font-size: 13px; font-weight: 700;
+    text-decoration: none; cursor: pointer; background: #7B1FA2; color: white; }
+  .users-list li .max-btn:active { background: #6a1b9a; }
+  .users-list li .max-btn.disabled { background: #ddd; color: #999; pointer-events: none; }
+  .users-list .empty { color: #999; font-style: italic; font-size: 14px; padding: 4px 0;
+    border: none; background: transparent; display: block; }
+
+  .messages-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .msg { max-width: 85%; padding: 8px 12px; border-radius: 14px; background: white;
+    border: 1px solid #e6e6e6; font-size: 15px; line-height: 1.35; word-wrap: break-word;
+    align-self: flex-start; }
+  .msg.mine { align-self: flex-end; background: #4CAF50; color: white; border-color: #388e3c; }
+  .msg .meta { font-size: 11px; opacity: 0.75; margin-bottom: 3px;
+    display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+  .msg .meta .who { font-weight: 700; }
+  .msg .text { white-space: pre-wrap; }
+  .messages-empty { text-align: center; color: #999; font-size: 14px; padding: 20px 10px; }
+
+  .composer { flex-shrink: 0; border-top: 1px solid #eee; background: white;
+    padding: 10px 12px; display: flex; gap: 8px; align-items: flex-end; }
+  .composer textarea { flex: 1; resize: none; min-height: 44px; max-height: 120px;
+    padding: 10px 12px; font-size: 16px; font-family: inherit;
+    border: 2px solid #ddd; border-radius: 12px; outline: none; min-width: 0; }
+  .composer textarea:focus { border-color: #4CAF50; }
+  .composer button { padding: 0 18px; height: 44px; min-width: 60px;
+    border: none; border-radius: 12px;
+    background: #4CAF50; color: white; font-size: 16px; font-weight: 700;
+    cursor: pointer; flex-shrink: 0; }
+  .composer button:active { background: #388e3c; }
+  .composer button:disabled { background: #bbb; cursor: not-allowed; }
 
   .hidden { display: none !important; }
-  .calendar.locked .header, .calendar.locked .weekdays, .calendar.locked .days { opacity: 0.4; pointer-events: none; }
+  .calendar.locked .header, .calendar.locked .weekdays, .calendar.locked .days-wrap
+    { opacity: 0.4; pointer-events: none; }
   .hint-bottom { font-size: 12px; color: #999; text-align: center; margin-top: 12px; line-height: 1.5; }
-  .step-badge { display: inline-block; background: #4CAF50; color: white; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 8px; margin-bottom: 8px; }
+  .step-badge { display: inline-block; background: #4CAF50; color: white; font-size: 12px;
+    font-weight: 700; padding: 2px 8px; border-radius: 8px; margin-bottom: 8px; }
+  .step-badge.admin { background: #ffa000; }
   .center { text-align: center; }
+  .loading { text-align: center; padding: 40px 10px; color: #888; font-size: 15px; }
+
+  @media (min-width: 560px) {
+    .header h2 { font-size: 24px; }
+    .header button { width: 56px; height: 56px; min-width: 56px; font-size: 30px; }
+    .weekdays div { font-size: 15px; padding: 8px 0; }
+    .weekdays, .days { gap: 14px; }
+    .days-wrap { padding: 0 14px 14px; margin: 0 -14px; }
+    .days .day { min-height: 124px; padding: 34px 8px 34px; border-radius: 14px; }
+    .days .day .num { font-size: 22px; top: 8px; left: 10px; }
+    .days .day .top-right { gap: 5px; }
+    .days .day .people-count { min-width: 30px; height: 30px; padding: 0 9px; font-size: 15px; border-radius: 15px; }
+    .days .day .pend-badge { min-width: 26px; height: 26px; font-size: 13px; border-radius: 13px; }
+    .days .day .names { display: flex; bottom: 8px; }
+    .days .day .names .who { font-size: 13px; padding: 2px 8px; }
+    .days .day .dots { display: none !important; }
+    .days .day .toggle-btn {
+      width: 44px; height: 44px; font-size: 26px;
+      bottom: -12px; left: -12px;
+      border: 3px solid #fff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.32);
+    }
+    .days .day .chat-btn { min-width: 34px; height: 34px; padding: 0 9px; font-size: 15px; border-radius: 17px; top: 6px; right: 6px; }
+    .days .day .chat-btn .badge { font-size: 12px; }
+  }
+  @media (max-width: 559px) {
+    body { padding: 5px; padding-top: max(5px, env(safe-area-inset-top)); padding-bottom: max(5px, env(safe-area-inset-bottom)); }
+    .calendar { padding: 10px; border-radius: 14px; }
+    .logged-bar { padding: 8px 10px; margin-bottom: 10px; }
+    .logged-bar .name { font-size: 14px; }
+    .logged-bar .ws { font-size: 11px; }
+    .logged-bar button { padding: 6px 10px; font-size: 13px; }
+    .weekdays, .days { gap: 9px; }
+    .weekdays div { font-size: 12px; padding: 4px 0; }
+    .days-wrap { padding: 0 9px 9px; margin: 0 -9px; }
+    .days .day { min-height: 92px; border-radius: 10px; padding: 26px 4px 26px; }
+    .days .day .num { font-size: 17px; top: 4px; left: 5px; }
+    .days .day .top-right { gap: 3px; }
+    .days .day .people-count { min-width: 26px; height: 26px; padding: 0 7px; font-size: 14px; border-radius: 13px; }
+    .days .day .people-count .u { font-size: 9px; }
+    .days .day .pend-badge { min-width: 22px; height: 22px; padding: 0 5px; font-size: 11px; border-radius: 11px; }
+    .days .day .dots { display: flex; bottom: 8px; gap: 3px; }
+    .days .day .dots .dot { width: 5px; height: 5px; }
+    .days .day .names { display: none; }
+    .days .day .toggle-btn { width: 32px; height: 32px; font-size: 20px; bottom: -8px; left: -8px; border: 2px solid #fff; }
+    .days .day .chat-btn { min-width: 28px; height: 28px; padding: 0 6px; font-size: 12px; border-radius: 14px; top: 4px; right: 4px; }
+    .days .day .chat-btn .badge { font-size: 10px; }
+    .modal { border-radius: 14px; }
+    .modal-header { padding: 12px 50px 8px 14px; }
+    .modal-header h3 { font-size: 17px; }
+    .modal-header .date-label { font-size: 13px; }
+    .users-list li { padding: 7px 9px; gap: 8px; font-size: 14px; }
+    .users-list li .avatar { width: 30px; height: 30px; font-size: 13px; }
+    .users-list li .u-name { font-size: 14px; }
+    .users-list li .u-phone { font-size: 12px; }
+    .users-list li .btn-approve, .users-list li .btn-reject,
+    .users-list li .max-btn { padding: 6px 10px; font-size: 12px; }
+    .composer { padding: 8px 10px; }
+    .composer textarea { font-size: 15px; padding: 8px 10px; min-height: 40px; }
+    .composer button { height: 40px; min-width: 52px; font-size: 15px; padding: 0 14px; }
+    .auth .form-row input { padding: 12px; font-size: 16px; }
+    .auth .btn-primary { padding: 12px; font-size: 16px; }
+    .auth .btn-secondary { padding: 11px; font-size: 15px; }
+    .auth select { padding: 12px; font-size: 16px; }
+  }
 </style>
 </head>
 <body>
 
 <div class="calendar locked" id="calendar">
+  <div id="loadingBlock" class="loading">Загрузка…</div>
 
-  <!-- ШАГ 1: ЦЕХ -->
   <div class="auth hidden" id="workshopBlock">
     <div class="center"><span class="step-badge">Шаг 1 — Цех</span></div>
-    <h3 id="workshopTitle">Выбор цеха</h3>
+    <h3>Выбор цеха</h3>
     <div id="workshopListWrap">
       <select id="workshopSelect"></select>
-      <div class="form-row">
-        <input type="password" id="workshopPass" placeholder="Пароль цеха" autocomplete="off">
-      </div>
+      <div class="form-row"><input type="password" id="workshopPass" placeholder="Пароль цеха" autocomplete="off"></div>
       <button class="btn-primary" id="workshopEnterBtn">Войти в цех</button>
       <button class="btn-link" id="showCreateWorkshopBtn">+ Создать новый цех</button>
     </div>
     <div id="workshopCreateWrap" class="hidden">
-      <div class="form-row">
-        <input type="text" id="newWorkshopName" placeholder="Название цеха" autocomplete="off">
-      </div>
-      <div class="form-row">
-        <input type="password" id="newWorkshopPass" placeholder="Пароль цеха" autocomplete="off">
-      </div>
+      <div class="form-row"><input type="text" id="newWorkshopName" placeholder="Название цеха" autocomplete="off"></div>
+      <div class="form-row"><input type="password" id="newWorkshopPass" placeholder="Пароль цеха" autocomplete="off"></div>
       <button class="btn-primary" id="createWorkshopBtn">Создать цех</button>
       <button class="btn-link" id="showJoinWorkshopBtn">← Назад к выбору</button>
     </div>
     <div class="hint" id="workshopHint"></div>
   </div>
 
-  <!-- ШАГ 2: РАБОЧИЙ -->
   <div class="auth hidden" id="userBlock">
     <div class="center"><span class="step-badge">Шаг 2 — Рабочий</span></div>
     <h3 id="userTitle">Вход</h3>
     <div class="hint" id="userWorkshopLabel" style="margin-bottom:10px;"></div>
-    <div class="form-row">
-      <input type="text" id="userNameInput" placeholder="Имя рабочего" autocomplete="off">
+
+    <div class="form-row"><input type="text" id="userNameInput" placeholder="Имя рабочего" autocomplete="off"></div>
+    <div class="form-row" id="userPhoneRow" style="display:none;">
+      <input type="tel" id="userPhoneInput" placeholder="Телефон (необязательно)" autocomplete="off" inputmode="tel">
     </div>
-    <div class="form-row">
-      <input type="password" id="userPassInput" placeholder="Пароль" autocomplete="off">
+    <div class="form-row" id="userMaxRow" style="display:none;">
+      <input type="text" id="userMaxInput" placeholder="MAX username или ссылка (необязательно)" autocomplete="off">
     </div>
+    <div class="form-row"><input type="password" id="userPassInput" placeholder="Пароль" autocomplete="off"></div>
     <button class="btn-primary" id="userLoginBtn">Войти</button>
     <button class="btn-secondary" id="userRegisterBtn">Зарегистрироваться</button>
     <button class="btn-link" id="backToWorkshopBtn">← Сменить цех</button>
     <div class="hint" id="userHint"></div>
   </div>
 
-  <!-- ВОШЁЛ -->
   <div class="logged-bar hidden" id="loggedBar">
     <div class="info">
       <span class="name" id="loggedName">—</span>
       <span class="ws" id="loggedWorkshop">—</span>
+      <span class="my-phone hidden" id="loggedPhone"></span>
     </div>
     <button id="logoutBtn">Выйти</button>
   </div>
 
-  <!-- КАЛЕНДАРЬ -->
   <div class="header">
-    <button id="prev" aria-label="Предыдущий месяц">‹</button>
+    <button id="prev">‹</button>
     <h2 id="monthYear"></h2>
-    <button id="next" aria-label="Следующий месяц">›</button>
+    <button id="next">›</button>
   </div>
-  <div class="weekdays">
-    <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div>
+  <div class="weekdays"><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div></div>
+  <div class="days-wrap">
+    <div class="days" id="days"></div>
   </div>
-  <div class="days" id="days"></div>
-  <div class="hint-bottom">
-    Тап по дню — список отметившихся.<br>
-    Кнопка +/− в углу — поставить или снять свою отметку.
-  </div>
+  <div class="hint-bottom">💬 — сообщения. + / − — заявка на смену.</div>
 </div>
 
 <div class="modal-backdrop" id="modalBackdrop">
   <div class="modal">
-    <h3 id="modalTitle">Отметились:</h3>
-    <div class="date-label" id="modalDate"></div>
-    <ul id="modalList"></ul>
-    <button class="btn-close" id="modalClose">Закрыть</button>
+    <div class="modal-header">
+      <h3 id="modalTitle">День</h3>
+      <div class="date-label" id="modalDate"></div>
+      <button class="close-x" id="modalClose">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody">
+
+      <div class="section-title">💬 Сообщения <span class="cnt" id="cntMessages">0</span></div>
+      <div class="messages-list" id="messagesList"></div>
+      <div class="messages-empty hidden" id="messagesEmpty">Сообщений пока нет — напишите первое 👇</div>
+
+      <div class="section-title" id="secApproved" style="display:none;">✅ В смене <span class="cnt" id="cntApproved">0</span></div>
+      <ul class="users-list" id="listApproved"></ul>
+
+      <div class="section-title" id="secPending" style="display:none;">⏳ Заявки <span class="cnt" id="cntPending">0</span></div>
+      <ul class="users-list" id="listPending"></ul>
+
+      <div class="section-title" id="secRejected" style="display:none;">✗ Отклонены <span class="cnt" id="cntRejected">0</span></div>
+      <ul class="users-list" id="listRejected"></ul>
+
+    </div>
+    <div class="composer">
+      <textarea id="msgInput" placeholder="Написать сообщение…" rows="1" maxlength="1000"></textarea>
+      <button id="msgSend" disabled>➤</button>
+    </div>
   </div>
 </div>
 
 <script type="module">
-  // ===== Firebase =====
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
-  import { getDatabase, ref, onValue, set, remove, get, child }
+  import { getDatabase, ref, onValue, set, remove, get, child, push, update }
     from "https://www.gstatic.com/firebasejs/13.0.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -222,70 +500,85 @@
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
 
-  // ===== Элементы =====
-  const calendarEl         = document.getElementById('calendar');
-  const monthYear          = document.getElementById('monthYear');
-  const daysEl             = document.getElementById('days');
-  const prevBtn            = document.getElementById('prev');
-  const nextBtn            = document.getElementById('next');
+  const $ = id => document.getElementById(id);
+  const calendarEl = $('calendar'), monthYear = $('monthYear'), daysEl = $('days');
+  const prevBtn = $('prev'), nextBtn = $('next');
+  const loadingBlock = $('loadingBlock');
+  const workshopBlock = $('workshopBlock'), workshopSelect = $('workshopSelect');
+  const workshopPass = $('workshopPass'), workshopEnterBtn = $('workshopEnterBtn');
+  const workshopHint = $('workshopHint');
+  const workshopListWrap = $('workshopListWrap'), workshopCreateWrap = $('workshopCreateWrap');
+  const newWorkshopName = $('newWorkshopName'), newWorkshopPass = $('newWorkshopPass');
+  const createWorkshopBtn = $('createWorkshopBtn');
+  const showCreateWorkshopBtn = $('showCreateWorkshopBtn'), showJoinWorkshopBtn = $('showJoinWorkshopBtn');
+  const userBlock = $('userBlock'), userWorkshopLabel = $('userWorkshopLabel');
+  const userNameInput = $('userNameInput'), userPhoneInput = $('userPhoneInput'), userPhoneRow = $('userPhoneRow');
+  const userMaxInput = $('userMaxInput'), userMaxRow = $('userMaxRow');
+  const userPassInput = $('userPassInput'), userLoginBtn = $('userLoginBtn'), userRegisterBtn = $('userRegisterBtn');
+  const userHint = $('userHint'), backToWorkshopBtn = $('backToWorkshopBtn');
+  const loggedBar = $('loggedBar'), loggedName = $('loggedName'), loggedWorkshop = $('loggedWorkshop');
+  const loggedPhone = $('loggedPhone'), logoutBtn = $('logoutBtn');
+  const modalBackdrop = $('modalBackdrop'), modalTitle = $('modalTitle'), modalDate = $('modalDate');
+  const modalBody = $('modalBody'), modalClose = $('modalClose');
+  const secApproved = $('secApproved'), listApproved = $('listApproved'), cntApproved = $('cntApproved');
+  const secPending = $('secPending'), listPending = $('listPending'), cntPending = $('cntPending');
+  const secRejected = $('secRejected'), listRejected = $('listRejected'), cntRejected = $('cntRejected');
+  const messagesList = $('messagesList'), messagesEmpty = $('messagesEmpty');
+  const cntMessages = $('cntMessages');
+  const msgInput = $('msgInput'), msgSend = $('msgSend');
 
-  const workshopBlock      = document.getElementById('workshopBlock');
-  const workshopSelect     = document.getElementById('workshopSelect');
-  const workshopPass       = document.getElementById('workshopPass');
-  const workshopEnterBtn   = document.getElementById('workshopEnterBtn');
-  const workshopHint       = document.getElementById('workshopHint');
-  const workshopListWrap   = document.getElementById('workshopListWrap');
-  const workshopCreateWrap = document.getElementById('workshopCreateWrap');
-  const newWorkshopName    = document.getElementById('newWorkshopName');
-  const newWorkshopPass    = document.getElementById('newWorkshopPass');
-  const createWorkshopBtn  = document.getElementById('createWorkshopBtn');
-  const showCreateWorkshopBtn = document.getElementById('showCreateWorkshopBtn');
-  const showJoinWorkshopBtn   = document.getElementById('showJoinWorkshopBtn');
-
-  const userBlock          = document.getElementById('userBlock');
-  const userWorkshopLabel  = document.getElementById('userWorkshopLabel');
-  const userNameInput      = document.getElementById('userNameInput');
-  const userPassInput      = document.getElementById('userPassInput');
-  const userLoginBtn       = document.getElementById('userLoginBtn');
-  const userRegisterBtn    = document.getElementById('userRegisterBtn');
-  const userHint           = document.getElementById('userHint');
-  const backToWorkshopBtn  = document.getElementById('backToWorkshopBtn');
-
-  const loggedBar          = document.getElementById('loggedBar');
-  const loggedName         = document.getElementById('loggedName');
-  const loggedWorkshop     = document.getElementById('loggedWorkshop');
-  const logoutBtn          = document.getElementById('logoutBtn');
-
-  const modalBackdrop      = document.getElementById('modalBackdrop');
-  const modalTitle         = document.getElementById('modalTitle');
-  const modalDate          = document.getElementById('modalDate');
-  const modalList          = document.getElementById('modalList');
-  const modalClose         = document.getElementById('modalClose');
-
-  // ===== Состояние =====
   const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   const today = new Date();
-  let currentYear = today.getFullYear();
-  let currentMonth = today.getMonth();
-  let currentWorkshop = null;
-  let currentUser = null;
-  let allMarks = {};
-  let unsubscribe = null;
+  let currentYear = today.getFullYear(), currentMonth = today.getMonth();
+  let currentWorkshop = null, currentUser = null;
+  let allMarks = {}, msgCounts = {}, openDayKey = null;
+  let unsubMarks = null, unsubMsgCounts = null, unsubModalMsgs = null;
 
-  // ===== Утилиты =====
-  function safeKey(name) { return encodeURIComponent(name.trim().toLowerCase()); }
-  function dayKey(y, m, d) { return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
-  function initials(name) { return name.trim().slice(0, 1).toUpperCase(); }
-  function setHint(el, msg, isError = false) { el.textContent = msg; el.classList.toggle('error', isError); }
+  const isAdmin = () => currentUser && currentUser.role === 'admin';
+  const safeKey = s => encodeURIComponent((s || '').trim().toLowerCase());
+  const dayKey = (y, m, d) => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  const initials = n => (n || '?').trim().slice(0,1).toUpperCase();
+  const setHint = (el, msg, isErr=false) => { el.textContent = msg; el.classList.toggle('error', isErr); };
+  const digitsOnly = s => (s || '').replace(/\D/g, '');
+  const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const formatTime = ts => { if (!ts) return ''; const d = new Date(ts); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); };
 
-  async function hash(text) {
+  async function sha256(text) {
     const data = new TextEncoder().encode(text);
     const buf = await crypto.subtle.digest('SHA-256', data);
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  function normalizePhone(raw) {
+    if (!raw) return '';
+    let d = digitsOnly(raw);
+    if (d.length === 11 && d[0] === '8') d = '7' + d.slice(1);
+    return d;
+  }
+  function formatPhone(d) {
+    if (!d) return '';
+    if (d.length === 11 && d[0] === '7') return '+7 ' + d.slice(1,4) + ' ' + d.slice(4,7) + '-' + d.slice(7,9) + '-' + d.slice(9,11);
+    if (d.length === 10) return '+7 ' + d.slice(0,3) + ' ' + d.slice(3,6) + '-' + d.slice(6,8) + '-' + d.slice(8,10);
+    return '+' + d;
+  }
+  function cleanMax(raw) {
+    raw = (raw || '').trim();
+    if (!raw) return '';
+    const m = raw.match(/max\.ru\/(?:u\/)?([^/?\s]+)/);
+    if (m) return m[1];
+    return raw.replace(/[^A-Za-z0-9_.]/g, '');
+  }
+
   // ===== Экраны =====
+  function showLoading() {
+    loadingBlock.classList.remove('hidden');
+    workshopBlock.classList.add('hidden');
+    userBlock.classList.add('hidden');
+    loggedBar.classList.add('hidden');
+    calendarEl.classList.add('locked');
+  }
   function showWorkshopStep() {
+    loadingBlock.classList.add('hidden');
     workshopBlock.classList.remove('hidden');
     userBlock.classList.add('hidden');
     loggedBar.classList.add('hidden');
@@ -293,47 +586,77 @@
     loadWorkshops();
   }
   function showUserStep() {
+    loadingBlock.classList.add('hidden');
     workshopBlock.classList.add('hidden');
     userBlock.classList.remove('hidden');
     loggedBar.classList.add('hidden');
     calendarEl.classList.add('locked');
     userWorkshopLabel.textContent = 'Цех: ' + currentWorkshop.name;
-    userNameInput.value = '';
-    userPassInput.value = '';
+    userNameInput.value = ''; userPhoneInput.value = ''; userMaxInput.value = ''; userPassInput.value = '';
+    userPhoneRow.style.display = 'none'; userMaxRow.style.display = 'none';
+    userLoginBtn.classList.remove('hidden');
     setHint(userHint, '');
   }
   function showLoggedIn() {
+    loadingBlock.classList.add('hidden');
     workshopBlock.classList.add('hidden');
     userBlock.classList.add('hidden');
     loggedBar.classList.remove('hidden');
     calendarEl.classList.remove('locked');
-    loggedName.textContent = currentUser.name;
-    loggedWorkshop.textContent = 'Цех: ' + currentWorkshop.name;
-    
-    if (unsubscribe) unsubscribe();
-    unsubscribe = onValue(ref(db, `workshops/${currentWorkshop.key}/marks`), (snapshot) => {
-      allMarks = snapshot.val() || {};
-      renderCalendar();
-    });
+    const admin = isAdmin();
+    loggedBar.classList.toggle('admin', admin);
+    loggedName.textContent = (admin ? '👑 ' : '') + currentUser.name;
+    loggedWorkshop.textContent = (admin ? 'Администратор · ' : 'Рабочий · ') + currentWorkshop.name;
+    if (currentUser.phone_fmt) {
+      loggedPhone.classList.remove('hidden');
+      loggedPhone.textContent = '📱 ' + currentUser.phone_fmt;
+    } else loggedPhone.classList.add('hidden');
+
+    subscribeMarks();
+    subscribeMsgCounts();
   }
 
-  // ===== ВОССТАНОВЛЕНИЕ СЕССИИ =====
-  function restoreSession() {
-    const wsName = localStorage.getItem('ws_name');
-    const wsKey = localStorage.getItem('ws_key');
-    const userName = localStorage.getItem('user_name');
-    const userKey = localStorage.getItem('user_key');
-
-    if (wsName && wsKey && userName && userKey) {
-      currentWorkshop = { name: wsName, key: wsKey };
-      currentUser = { name: userName, key: userKey };
-      showLoggedIn();
-    } else if (wsName && wsKey) {
-      currentWorkshop = { name: wsName, key: wsKey };
+  // ===== СЕССИЯ =====
+  function saveSession() {
+    localStorage.setItem('cal_ws_key', currentWorkshop.key);
+    localStorage.setItem('cal_ws_name', currentWorkshop.name);
+    localStorage.setItem('cal_user_key', currentUser.key);
+    localStorage.setItem('cal_user_json', JSON.stringify(currentUser));
+  }
+  function clearSession() {
+    ['cal_ws_key','cal_ws_name','cal_user_key','cal_user_json'].forEach(k => localStorage.removeItem(k));
+  }
+  async function restoreSession() {
+    const wsKey = localStorage.getItem('cal_ws_key');
+    const wsName = localStorage.getItem('cal_ws_name');
+    const userKey = localStorage.getItem('cal_user_key');
+    const userJson = localStorage.getItem('cal_user_json');
+    if (wsKey && wsName) {
+      currentWorkshop = { key: wsKey, name: wsName };
+      if (userKey && userJson) {
+        try {
+          const u = JSON.parse(userJson);
+          // проверяем, что юзер существует в Firebase
+          const snap = await get(child(ref(db), `workshops/${wsKey}/users/${userKey}`));
+          if (snap.exists()) {
+            const data = snap.val();
+            currentUser = {
+              key: userKey,
+              name: data.name,
+              phone: data.phone || '',
+              phone_fmt: formatPhone(data.phone || ''),
+              max_username: data.maxUsername || '',
+              role: data.role || 'worker'
+            };
+            showLoggedIn();
+            return;
+          }
+        } catch (e) { console.error(e); }
+      }
       showUserStep();
-    } else {
-      showWorkshopStep();
+      return;
     }
+    showWorkshopStep();
   }
 
   // ===== ЦЕХА =====
@@ -342,20 +665,18 @@
       const snap = await get(child(ref(db), 'workshops'));
       workshopSelect.innerHTML = '';
       if (!snap.exists()) {
-        const opt = document.createElement('option');
-        opt.value = '';
-        opt.textContent = '— нет цехов, создайте первый —';
-        workshopSelect.appendChild(opt);
-        workshopEnterBtn.disabled = true;
+        const o = document.createElement('option');
+        o.value = ''; o.textContent = '— нет цехов, создайте первый —';
+        workshopSelect.appendChild(o); workshopEnterBtn.disabled = true;
         return;
       }
       workshopEnterBtn.disabled = false;
       const data = snap.val();
       Object.keys(data).forEach(key => {
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.textContent = data[key].name || key;
-        workshopSelect.appendChild(opt);
+        const o = document.createElement('option');
+        o.value = key;
+        o.textContent = data[key].name || key;
+        workshopSelect.appendChild(o);
       });
     } catch (e) { console.error(e); }
   }
@@ -365,18 +686,13 @@
     const password = workshopPass.value;
     if (!key) { setHint(workshopHint, 'Выберите цех', true); return; }
     if (!password) { setHint(workshopHint, 'Введите пароль цеха', true); return; }
-
     const name = workshopSelect.options[workshopSelect.selectedIndex].textContent;
-
     try {
       const snap = await get(child(ref(db), `workshops/${key}/passHash`));
-      if (!snap.exists() || snap.val() !== await hash(password)) {
-        setHint(workshopHint, 'Неверный пароль цеха', true);
-        return;
+      if (!snap.exists() || snap.val() !== await sha256(password)) {
+        setHint(workshopHint, 'Неверный пароль цеха', true); return;
       }
-      currentWorkshop = { name, key };
-      localStorage.setItem('ws_name', name);
-      localStorage.setItem('ws_key', key);
+      currentWorkshop = { key, name };
       workshopPass.value = '';
       showUserStep();
     } catch (e) { setHint(workshopHint, 'Ошибка сети', true); }
@@ -385,41 +701,33 @@
   async function createWorkshop() {
     const name = newWorkshopName.value.trim();
     const password = newWorkshopPass.value;
-    if (!name || password.length < 3) { setHint(workshopHint, 'Название и пароль минимум 3 символа', true); return; }
-    
+    if (!name || password.length < 3) {
+      setHint(workshopHint, 'Название и пароль минимум 3 символа', true); return;
+    }
     const key = safeKey(name);
     try {
       const snap = await get(child(ref(db), `workshops/${key}`));
       if (snap.exists()) { setHint(workshopHint, 'Цех с таким названием уже есть', true); return; }
-      
-      await set(ref(db, `workshops/${key}`), { name, passHash: await hash(password) });
-      
-      currentWorkshop = { name, key };
-      localStorage.setItem('ws_name', name);
-      localStorage.setItem('ws_key', key);
-      newWorkshopName.value = '';
-      newWorkshopPass.value = '';
+      await set(ref(db, `workshops/${key}`), { name, passHash: await sha256(password) });
+      currentWorkshop = { key, name };
+      newWorkshopName.value = ''; newWorkshopPass.value = '';
       showUserStep();
     } catch (e) { setHint(workshopHint, 'Ошибка сети', true); }
   }
 
   function showCreateWorkshopForm() {
-    workshopListWrap.classList.add('hidden');
-    workshopCreateWrap.classList.remove('hidden');
+    workshopListWrap.classList.add('hidden'); workshopCreateWrap.classList.remove('hidden');
     setHint(workshopHint, '');
   }
   function showJoinWorkshopForm() {
-    workshopCreateWrap.classList.add('hidden');
-    workshopListWrap.classList.remove('hidden');
-    setHint(workshopHint, '');
-    loadWorkshops();
+    workshopCreateWrap.classList.add('hidden'); workshopListWrap.classList.remove('hidden');
+    setHint(workshopHint, ''); loadWorkshops();
   }
-
-  async function backToWorkshopStep() {
-    localStorage.removeItem('ws_name'); localStorage.removeItem('ws_key');
-    localStorage.removeItem('user_name'); localStorage.removeItem('user_key');
-    currentWorkshop = null; currentUser = null; allMarks = {};
-    if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  function backToWorkshopStep() {
+    clearSession();
+    if (unsubMarks) { unsubMarks(); unsubMarks = null; }
+    if (unsubMsgCounts) { unsubMsgCounts(); unsubMsgCounts = null; }
+    currentWorkshop = null; currentUser = null; allMarks = {}; msgCounts = {};
     showWorkshopStep();
   }
 
@@ -428,20 +736,32 @@
     if (!currentWorkshop) return;
     const name = userNameInput.value.trim();
     const password = userPassInput.value;
+    const phoneRaw = userPhoneInput.value.trim();
+    const maxRaw = userMaxInput.value.trim();
     if (!name || password.length < 3) { setHint(userHint, 'Имя и пароль минимум 3 символа', true); return; }
+    const phone = normalizePhone(phoneRaw);
+    if (phone && phone.length < 10) { setHint(userHint, 'Телефон слишком короткий', true); return; }
+    const maxU = cleanMax(maxRaw);
+    const userKey = safeKey(name);
 
-    const key = safeKey(name);
     try {
-      const snap = await get(child(ref(db), `workshops/${currentWorkshop.key}/users/${key}`));
-      if (snap.exists()) { setHint(userHint, 'Такое имя уже занято в этом цехе', true); return; }
-      
-      await set(ref(db, `workshops/${currentWorkshop.key}/users/${key}`), { name, passHash: await hash(password) });
-      
-      currentUser = { name, key };
-      localStorage.setItem('user_name', name);
-      localStorage.setItem('user_key', key);
-      userNameInput.value = ''; userPassInput.value = '';
+      const snap = await get(child(ref(db), `workshops/${currentWorkshop.key}/users`));
+      const users = snap.exists() ? snap.val() : {};
+      if (users[userKey]) { setHint(userHint, 'Такое имя уже занято в этом цехе', true); return; }
+      const userCount = Object.keys(users).length;
+      const role = userCount === 0 ? 'admin' : 'worker';
+
+      await set(ref(db, `workshops/${currentWorkshop.key}/users/${userKey}`), {
+        name, phone, maxUsername: maxU, role, passHash: await sha256(password)
+      });
+
+      currentUser = { key: userKey, name, phone, phone_fmt: formatPhone(phone), max_username: maxU, role };
+      saveSession();
+      userNameInput.value = ''; userPassInput.value = ''; userPhoneInput.value = ''; userMaxInput.value = '';
       showLoggedIn();
+      if (role === 'admin') {
+        setTimeout(() => alert('👑 Вы зарегистрированы как АДМИНИСТРАТОР цеха.\n\nТеперь вы можете одобрять или отклонять заявки рабочих на смену.'), 200);
+      }
     } catch (e) { setHint(userHint, 'Ошибка сети', true); }
   }
 
@@ -450,152 +770,407 @@
     const name = userNameInput.value.trim();
     const password = userPassInput.value;
     if (!name || !password) { setHint(userHint, 'Введите имя и пароль', true); return; }
-
-    const key = safeKey(name);
+    const userKey = safeKey(name);
     try {
-      const snap = await get(child(ref(db), `workshops/${currentWorkshop.key}/users/${key}`));
-      if (!snap.exists() || snap.val().passHash !== await hash(password)) {
-        setHint(userHint, 'Неверное имя или пароль', true);
-        return;
+      const snap = await get(child(ref(db), `workshops/${currentWorkshop.key}/users/${userKey}`));
+      if (!snap.exists() || snap.val().passHash !== await sha256(password)) {
+        setHint(userHint, 'Неверное имя или пароль', true); return;
       }
-      currentUser = { name, key };
-      localStorage.setItem('user_name', name);
-      localStorage.setItem('user_key', key);
+      const d = snap.val();
+      currentUser = {
+        key: userKey,
+        name: d.name,
+        phone: d.phone || '',
+        phone_fmt: formatPhone(d.phone || ''),
+        max_username: d.maxUsername || '',
+        role: d.role || 'worker'
+      };
+      saveSession();
       userNameInput.value = ''; userPassInput.value = '';
       showLoggedIn();
     } catch (e) { setHint(userHint, 'Ошибка сети', true); }
   }
 
-  // ===== ВЫХОД =====
   function logoutUser() {
-    localStorage.removeItem('user_name'); localStorage.removeItem('user_key');
-    if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-    currentUser = null; allMarks = {};
-    showUserStep();
+    clearSession();
+    if (unsubMarks) { unsubMarks(); unsubMarks = null; }
+    if (unsubMsgCounts) { unsubMsgCounts(); unsubMsgCounts = null; }
+    currentUser = null; currentWorkshop = null; allMarks = {}; msgCounts = {};
+    workshopPass.value = ''; userPassInput.value = '';
+    showWorkshopStep();
+  }
+
+  // ===== ПОДПИСКИ НА FIREBASE =====
+  function subscribeMarks() {
+    if (unsubMarks) unsubMarks();
+    unsubMarks = onValue(ref(db, `workshops/${currentWorkshop.key}/marks`), snap => {
+      allMarks = snap.val() || {};
+      renderCalendar();
+    });
+  }
+  function subscribeMsgCounts() {
+    if (unsubMsgCounts) unsubMsgCounts();
+    unsubMsgCounts = onValue(ref(db, `workshops/${currentWorkshop.key}/messages`), snap => {
+      const data = snap.val() || {};
+      msgCounts = {};
+      Object.keys(data).forEach(day => { msgCounts[day] = Object.keys(data[day] || {}).length; });
+      renderCalendar();
+    });
   }
 
   // ===== ОТМЕТКИ =====
-  function toggleDay(key) {
+  async function toggleDay(key) {
     if (!currentUser || !currentWorkshop) return;
-    const users = allMarks[key] || {};
-    const path = `workshops/${currentWorkshop.key}/marks/${key}/${currentUser.key}`;
-    
-    if (users[currentUser.key]) {
-      remove(ref(db, path));
+    const userMarkRef = ref(db, `workshops/${currentWorkshop.key}/marks/${key}/${currentUser.key}`);
+    const snap = await get(userMarkRef);
+    if (snap.exists()) {
+      await remove(userMarkRef);
     } else {
-      set(ref(db, path), currentUser.name);
+      const status = isAdmin() ? 'approved' : 'pending';
+      await set(userMarkRef, {
+        name: currentUser.name,
+        phone: currentUser.phone || '',
+        maxUsername: currentUser.max_username || '',
+        role: currentUser.role,
+        status
+      });
     }
+  }
+
+  async function setStatus(userKey, day, status) {
+    if (!isAdmin()) return;
+    await update(ref(db, `workshops/${currentWorkshop.key}/marks/${day}/${userKey}`), { status });
+    if (openDayKey === day) renderModalLists();
   }
 
   // ===== КАЛЕНДАРЬ =====
   function renderCalendar() {
     daysEl.innerHTML = '';
     monthYear.textContent = `${monthNames[currentMonth]} ${currentYear}`;
-
     const firstDay = new Date(currentYear, currentMonth, 1).getDay();
     const offset = firstDay === 0 ? 6 : firstDay - 1;
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
     for (let i = 0; i < offset; i++) {
-      const empty = document.createElement('div');
-      empty.classList.add('day', 'empty');
-      daysEl.appendChild(empty);
+      const e = document.createElement('div');
+      e.classList.add('day', 'empty'); daysEl.appendChild(e);
     }
 
     for (let d = 1; d <= daysInMonth; d++) {
       const key = dayKey(currentYear, currentMonth, d);
       const users = allMarks[key] || {};
-      const userIds = Object.keys(users);
-      const count = userIds.length;
-      const isMine = currentUser && users[currentUser.key];
+      const entries = Object.entries(users);
+      const approved = entries.filter(([, u]) => u.status === 'approved');
+      const pending  = entries.filter(([, u]) => u.status === 'pending');
+      const rejected = entries.filter(([, u]) => u.status === 'rejected');
+      const myEntry = currentUser ? users[currentUser.key] : null;
+      const myStatus = myEntry ? myEntry.status : null;
 
       const dayEl = document.createElement('div');
       dayEl.className = 'day';
+      if (d === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear())
+        dayEl.classList.add('today');
 
-      if (d === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear()) dayEl.classList.add('today');
-      if (count > 0) dayEl.classList.add(isMine ? 'mine' : 'has-users');
-
-      const num = document.createElement('div');
-      num.className = 'num';
-      num.textContent = d;
-      dayEl.appendChild(num);
-
-      // === МЕТКА С КОЛИЧЕСТВОМ В ПРАВОМ ВЕРХНЕМ УГЛУ ===
-      if (count > 0) {
-        const badge = document.createElement('div');
-        badge.className = 'count-badge';
-        badge.textContent = count;
-        dayEl.appendChild(badge);
+      if (approved.length > 0) {
+        dayEl.classList.add(myStatus === 'approved' ? 'mine' : 'has-users');
+      } else if (pending.length > 0) {
+        dayEl.classList.add(myStatus === 'pending' ? 'mine-pending' : 'has-pending');
+      } else if (rejected.length > 0) {
+        dayEl.classList.add(myStatus === 'rejected' ? 'mine-pending' : 'has-pending');
       }
 
-      // Имена (максимум 1, чтобы не мешали метке)
-      if (count > 0) {
+      const num = document.createElement('div');
+      num.className = 'num'; num.textContent = d;
+      dayEl.appendChild(num);
+
+      const topRight = document.createElement('div');
+      topRight.className = 'top-right';
+
+      if (pending.length > 0) {
+        const badge = document.createElement('div');
+        badge.className = 'pend-badge' + (isAdmin() ? ' admin' : '');
+        badge.textContent = '⏳' + pending.length;
+        badge.title = isAdmin() ? `${pending.length} заявок на рассмотрении` : 'Есть заявки';
+        topRight.appendChild(badge);
+      }
+
+      const countEl = document.createElement('div');
+      countEl.className = 'people-count' + (approved.length === 0 ? ' zero' : '');
+      if (approved.length > 0) {
+        const n = document.createElement('span'); n.textContent = approved.length; countEl.appendChild(n);
+        const u = document.createElement('span'); u.className = 'u'; u.textContent = 'чел'; countEl.appendChild(u);
+      } else countEl.textContent = '0';
+      topRight.appendChild(countEl);
+      dayEl.appendChild(topRight);
+
+      const showEntries = [...approved];
+      if (myEntry && myEntry.status === 'pending') showEntries.push([currentUser.key, myEntry]);
+      if (myEntry && myEntry.status === 'rejected') showEntries.push([currentUser.key, myEntry]);
+
+      if (showEntries.length > 0) {
         const namesBox = document.createElement('div');
         namesBox.className = 'names';
-        const maxShow = 1;
-        userIds.slice(0, maxShow).forEach((uid) => {
+        const maxShow = 2;
+        showEntries.slice(0, maxShow).forEach(([uid, info]) => {
           const w = document.createElement('div');
           w.className = 'who';
-          w.textContent = users[uid].split(/\s+/)[0].slice(0, 6);
+          const nm = (info.name || '').split(/\s+/)[0];
+          const pref = (info.status === 'pending' ? '⏳ ' : info.status === 'rejected' ? '✗ ' : '');
+          const txt = pref + nm;
+          w.textContent = txt.length > 9 ? txt.slice(0, 9) + '…' : txt;
           namesBox.appendChild(w);
         });
-        if (count > maxShow) {
-          const more = document.createElement('div');
-          more.className = 'more';
-          more.textContent = `+${count - maxShow}`;
-          namesBox.appendChild(more);
+        if (showEntries.length > maxShow) {
+          const m = document.createElement('div');
+          m.className = 'more';
+          m.textContent = `+${showEntries.length - maxShow}`;
+          namesBox.appendChild(m);
         }
         dayEl.appendChild(namesBox);
       }
 
-      // Большая кнопка +/-
-      const toggleBtn = document.createElement('div');
-      toggleBtn.className = 'toggle-btn';
-      toggleBtn.textContent = isMine ? '−' : '+';
-      toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleDay(key); });
-      dayEl.appendChild(toggleBtn);
+      const dots = document.createElement('div');
+      dots.className = 'dots';
+      if (approved.length > 0) { const dd = document.createElement('div'); dd.className = 'dot'; dots.appendChild(dd); }
+      if (pending.length > 0)  { const dd = document.createElement('div'); dd.className = 'dot pending'; dots.appendChild(dd); }
+      if (rejected.length > 0) { const dd = document.createElement('div'); dd.className = 'dot rejected'; dots.appendChild(dd); }
+      if (dots.children.length > 0) dayEl.appendChild(dots);
 
-      dayEl.addEventListener('click', () => openModal(key, d));
+      const t = document.createElement('div');
+      t.className = 'toggle-btn';
+      t.textContent = myStatus ? '−' : '+';
+      t.addEventListener('click', e => { e.stopPropagation(); toggleDay(key); });
+      dayEl.appendChild(t);
+
+      const msgCount = msgCounts[key] || 0;
+      const c = document.createElement('div');
+      c.className = 'chat-btn' + (msgCount > 0 ? ' has-msg' : '');
+      c.innerHTML = '💬' + (msgCount > 0 ? `<span class="badge">${msgCount}</span>` : '');
+      c.addEventListener('click', e => { e.stopPropagation(); openModal(key, d, true); });
+      dayEl.appendChild(c);
+
+      dayEl.addEventListener('click', () => openModal(key, d, false));
       daysEl.appendChild(dayEl);
     }
   }
 
   // ===== МОДАЛКА =====
-  function openModal(key, dayNumber) {
-    const users = allMarks[key] || {};
-    const entries = Object.entries(users);
-    const [y, m] = key.split('-');
+  function makeUserLi(uid, info, opts) {
+    opts = opts || {};
+    const isMe = currentUser && uid === currentUser.key;
+    const li = document.createElement('li');
+    if (isMe) li.classList.add('me');
+    li.classList.add(info.status === 'approved' ? 'approved' : info.status === 'pending' ? 'pending' : 'rejected');
 
-    modalTitle.textContent = entries.length ? `Отметились (${entries.length}):` : 'Никто не отметился';
+    const av = document.createElement('span');
+    av.className = 'avatar'; av.textContent = initials(info.name);
+    li.appendChild(av);
+
+    const infoBox = document.createElement('div');
+    infoBox.className = 'u-info';
+
+    const n = document.createElement('div');
+    n.className = 'u-name';
+    n.innerHTML = (info.role === 'admin' ? '<span class="crown">👑</span> ' : '') +
+      escapeHtml(info.name || '?') + (isMe ? ' (вы)' : '');
+    infoBox.appendChild(n);
+
+    const ph = document.createElement('div');
+    if (info.phone) { ph.className = 'u-phone'; ph.textContent = '📱 ' + formatPhone(info.phone); }
+    else { ph.className = 'u-phone empty'; ph.textContent = 'телефон не указан'; }
+    infoBox.appendChild(ph);
+
+    if (info.maxUsername) {
+      const mx = document.createElement('div');
+      mx.className = 'u-phone';
+      mx.textContent = 'MAX: ' + info.maxUsername;
+      infoBox.appendChild(mx);
+    }
+    li.appendChild(infoBox);
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    if (info.status === 'approved') {
+      const st = document.createElement('span'); st.className = 'status-badge approved'; st.textContent = '✅ В смене';
+      actions.appendChild(st);
+    }
+    if (info.status === 'rejected') {
+      const st = document.createElement('span'); st.className = 'status-badge rejected'; st.textContent = '✗ Отклонена';
+      actions.appendChild(st);
+    }
+
+    if (opts.showApproveReject && info.status === 'pending') {
+      const btnOk = document.createElement('button');
+      btnOk.className = 'btn-approve'; btnOk.textContent = '✓ Одобрить';
+      btnOk.addEventListener('click', () => setStatus(uid, openDayKey, 'approved'));
+      actions.appendChild(btnOk);
+      const btnNo = document.createElement('button');
+      btnNo.className = 'btn-reject'; btnNo.textContent = '✗ Отклонить';
+      btnNo.addEventListener('click', () => setStatus(uid, openDayKey, 'rejected'));
+      actions.appendChild(btnNo);
+    }
+
+    if (opts.showRestore && info.status === 'rejected') {
+      const btnOk = document.createElement('button');
+      btnOk.className = 'btn-approve'; btnOk.textContent = '✓ Вернуть';
+      btnOk.addEventListener('click', () => setStatus(uid, openDayKey, 'approved'));
+      actions.appendChild(btnOk);
+    }
+
+    if (info.maxUsername) {
+      const mx = document.createElement('a');
+      mx.className = 'max-btn';
+      mx.href = `https://max.ru/${info.maxUsername}`;
+      mx.target = '_blank'; mx.rel = 'noopener';
+      mx.textContent = 'MAX';
+      actions.appendChild(mx);
+    }
+
+    if (actions.children.length > 0) li.appendChild(actions);
+    return li;
+  }
+
+  function renderModalLists() {
+    if (!openDayKey) return;
+    const users = allMarks[openDayKey] || {};
+    const entries = Object.entries(users);
+    const approved = entries.filter(([, u]) => u.status === 'approved');
+    const pending  = entries.filter(([, u]) => u.status === 'pending');
+    const rejected = entries.filter(([, u]) => u.status === 'rejected');
+
+    listApproved.innerHTML = '';
+    if (approved.length === 0) {
+      const li = document.createElement('li'); li.className = 'empty';
+      li.textContent = 'Пока никто не в смене';
+      listApproved.appendChild(li);
+    } else {
+      approved.forEach(([uid, info]) => listApproved.appendChild(makeUserLi(uid, info, {})));
+    }
+    secApproved.style.display = '';
+    cntApproved.textContent = approved.length;
+
+    let visiblePending = pending;
+    if (!isAdmin()) visiblePending = pending.filter(([uid]) => currentUser.key === uid);
+    if (visiblePending.length > 0) {
+      listPending.innerHTML = '';
+      visiblePending.forEach(([uid, info]) =>
+        listPending.appendChild(makeUserLi(uid, info, { showApproveReject: isAdmin() })));
+      secPending.style.display = '';
+      cntPending.textContent = visiblePending.length;
+    } else secPending.style.display = 'none';
+
+    let visibleRejected = rejected;
+    if (!isAdmin()) visibleRejected = rejected.filter(([uid]) => currentUser.key === uid);
+    if (visibleRejected.length > 0) {
+      listRejected.innerHTML = '';
+      visibleRejected.forEach(([uid, info]) =>
+        listRejected.appendChild(makeUserLi(uid, info, { showRestore: isAdmin() })));
+      secRejected.style.display = '';
+      cntRejected.textContent = visibleRejected.length;
+    } else secRejected.style.display = 'none';
+
+    if (approved.length + pending.length + rejected.length === 0) {
+      listApproved.innerHTML = '<li class="empty">Пока никто не отметил этот день</li>';
+      secApproved.style.display = '';
+    }
+  }
+
+  function openModal(key, dayNumber, focusComposer) {
+    openDayKey = key;
+    const users = allMarks[key] || {};
+    const total = Object.keys(users).length;
+    const [y, m] = key.split('-');
+    modalTitle.textContent = total ? `День ${dayNumber} · всего ${total}` : 'День ' + dayNumber;
     modalDate.textContent = `${dayNumber} ${monthNames[parseInt(m,10)-1]} ${y}`;
 
-    modalList.innerHTML = '';
-    if (entries.length === 0) {
-      const li = document.createElement('li');
-      li.textContent = 'Пока никто не отметил этот день';
-      li.style.color = '#999';
-      modalList.appendChild(li);
-    } else {
-      entries.forEach(([uid, name]) => {
-        const li = document.createElement('li');
-        if (currentUser && uid === currentUser.key) li.classList.add('me');
-        const av = document.createElement('span');
-        av.className = 'avatar';
-        av.textContent = initials(name);
-        li.appendChild(av);
-        const span = document.createElement('span');
-        span.textContent = name + (currentUser && uid === currentUser.key ? ' (вы)' : '');
-        li.appendChild(span);
-        modalList.appendChild(li);
-      });
-    }
-    modalBackdrop.classList.add('open');
-  }
-  function closeModal() { modalBackdrop.classList.remove('open'); }
-  modalClose.addEventListener('click', closeModal);
-  modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) closeModal(); });
+    messagesList.innerHTML = '';
+    messagesEmpty.classList.add('hidden');
+    cntMessages.textContent = '0';
+    msgInput.value = '';
+    msgSend.disabled = !currentUser;
 
-  // ===== НАВИГАЦИЯ =====
+    modalBackdrop.classList.add('open');
+    if (focusComposer) setTimeout(() => msgInput.focus(), 100);
+
+    if (unsubModalMsgs) unsubModalMsgs();
+    unsubModalMsgs = onValue(ref(db, `workshops/${currentWorkshop.key}/messages/${key}`), snap => {
+      const data = snap.val() || {};
+      const list = Object.entries(data)
+        .map(([id, v]) => ({ id, ...v }))
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      renderMessages(list);
+    });
+
+    renderModalLists();
+    modalBody.scrollTop = 0;
+  }
+
+  function renderMessages(list) {
+    messagesList.innerHTML = '';
+    if (!list || list.length === 0) {
+      messagesEmpty.classList.remove('hidden');
+      cntMessages.textContent = '0';
+      return;
+    }
+    messagesEmpty.classList.add('hidden');
+    cntMessages.textContent = list.length;
+
+    list.forEach(m => {
+      const el = document.createElement('div');
+      el.className = 'msg' + (currentUser && m.userKey === currentUser.key ? ' mine' : '');
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const who = document.createElement('span'); who.className = 'who';
+      who.textContent = (m.role === 'admin' ? '👑 ' : '') + m.userName;
+      meta.appendChild(who);
+      if (m.phone) { const ph = document.createElement('span'); ph.textContent = '· ' + formatPhone(m.phone); meta.appendChild(ph); }
+      if (m.maxUsername) { const mx = document.createElement('span'); mx.textContent = '· MAX: ' + m.maxUsername; meta.appendChild(mx); }
+      const t = document.createElement('span'); t.textContent = '· ' + formatTime(m.createdAt); meta.appendChild(t);
+      el.appendChild(meta);
+      const txt = document.createElement('div'); txt.className = 'text'; txt.textContent = m.text; el.appendChild(txt);
+      messagesList.appendChild(el);
+    });
+
+    modalBody.scrollTop = 0;
+  }
+
+  async function sendMessage() {
+    if (!currentUser || !openDayKey) return;
+    const text = msgInput.value.trim(); if (!text) return;
+    msgSend.disabled = true;
+    try {
+      await push(ref(db, `workshops/${currentWorkshop.key}/messages/${openDayKey}`), {
+        text,
+        userKey: currentUser.key,
+        userName: currentUser.name,
+        phone: currentUser.phone || '',
+        maxUsername: currentUser.max_username || '',
+        role: currentUser.role,
+        createdAt: Date.now()
+      });
+      msgInput.value = ''; msgInput.style.height = 'auto';
+      msgInput.focus();
+    } catch (e) { alert('Ошибка отправки'); }
+    finally { msgSend.disabled = !msgInput.value.trim(); }
+  }
+
+  function closeModal() {
+    modalBackdrop.classList.remove('open');
+    openDayKey = null;
+    if (unsubModalMsgs) { unsubModalMsgs(); unsubModalMsgs = null; }
+  }
+  modalClose.addEventListener('click', closeModal);
+  modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeModal(); });
+  msgInput.addEventListener('input', () => {
+    msgInput.style.height = 'auto';
+    msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
+    msgSend.disabled = !msgInput.value.trim() || !currentUser;
+  });
+  msgInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!msgSend.disabled) sendMessage(); }
+  });
+  msgSend.addEventListener('click', sendMessage);
+
   function changeMonth(delta) {
     currentMonth += delta;
     if (currentMonth < 0) { currentMonth = 11; currentYear--; }
@@ -606,27 +1181,33 @@
   nextBtn.addEventListener('click', () => changeMonth(1));
 
   let tX = 0, tY = 0;
-  calendarEl.addEventListener('touchstart', (e) => { tX = e.touches[0].clientX; tY = e.touches[0].clientY; }, { passive: true });
-  calendarEl.addEventListener('touchend', (e) => {
+  calendarEl.addEventListener('touchstart', e => { tX = e.touches[0].clientX; tY = e.touches[0].clientY; }, { passive: true });
+  calendarEl.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - tX;
     const dy = e.changedTouches[0].clientY - tY;
     if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) changeMonth(dx > 0 ? -1 : 1);
   }, { passive: true });
 
-  // ===== ОБРАБОТЧИКИ =====
   workshopEnterBtn.addEventListener('click', enterWorkshop);
-  workshopPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') enterWorkshop(); });
+  workshopPass.addEventListener('keydown', e => { if (e.key === 'Enter') enterWorkshop(); });
   showCreateWorkshopBtn.addEventListener('click', showCreateWorkshopForm);
   showJoinWorkshopBtn.addEventListener('click', showJoinWorkshopForm);
   createWorkshopBtn.addEventListener('click', createWorkshop);
-
   userLoginBtn.addEventListener('click', loginUserStep);
-  userRegisterBtn.addEventListener('click', registerUser);
-  userPassInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loginUserStep(); });
+  userRegisterBtn.addEventListener('click', () => {
+    if (userPhoneRow.style.display === 'none') {
+      userPhoneRow.style.display = 'flex';
+      userMaxRow.style.display = 'flex';
+      userLoginBtn.classList.add('hidden');
+      setHint(userHint, 'Придумайте имя и пароль. Телефон и MAX — по желанию.');
+      return;
+    }
+    registerUser();
+  });
+  userPassInput.addEventListener('keydown', e => { if (e.key === 'Enter') loginUserStep(); });
   backToWorkshopBtn.addEventListener('click', backToWorkshopStep);
   logoutBtn.addEventListener('click', logoutUser);
 
-  // ===== СТАРТ =====
   renderCalendar();
   restoreSession();
 </script>
