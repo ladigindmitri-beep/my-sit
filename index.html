@@ -19,14 +19,14 @@
 // ============================================================================
 //  НАСТРОЙКИ (правьте здесь, а не в середине файла)
 // ============================================================================
-const APP_DEBUG        = false;                 // true — показывать ошибки в браузере
+const APP_DEBUG        = false;
 const APP_TIMEZONE     = 'Europe/Moscow';
 const APP_SESSION_NAME = 'calendar_sid';
-const APP_SESSION_DAYS = 30;                    // срок жизни сессии
+const APP_SESSION_DAYS = 30;
 const DB_PATH          = __DIR__ . '/calendar.db';
 const LOG_PATH         = __DIR__ . '/calendar-errors.log';
-const RATE_LIMIT_LOGIN_MAX    = 10;             // попыток
-const RATE_LIMIT_LOGIN_WINDOW = 300;            // за 5 минут
+const RATE_LIMIT_LOGIN_MAX    = 10;
+const RATE_LIMIT_LOGIN_WINDOW = 300;
 
 // ============================================================================
 //  ИНИЦИАЛИЗАЦИЯ
@@ -37,7 +37,6 @@ ini_set('display_errors', APP_DEBUG ? '1' : '0');
 ini_set('log_errors', '1');
 ini_set('error_log', LOG_PATH);
 
-// Безопасные cookie сессии
 session_set_cookie_params([
     'lifetime' => APP_SESSION_DAYS * 86400,
     'path'     => '/',
@@ -194,7 +193,6 @@ function init_db(): void {
         catch (Exception $e) {}
     }
 
-    // Лёгкий rate-limit
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS rate_limit (
             key        TEXT PRIMARY KEY,
@@ -204,17 +202,13 @@ function init_db(): void {
     ");
 }
 
-
 // ============================================================================
-//  БЕЗОПАСНОСТЬ: хеши, CSRF, rate-limit
+//  БЕЗОПАСНОСТЬ
 // ============================================================================
 function hash_password(string $t): string {
     return password_hash($t, PASSWORD_DEFAULT);
 }
 
-/**
- * Проверка пароля с поддержкой старых SHA-256 (64 hex) для миграции.
- */
 function verify_password(string $t, string $hash): bool {
     if (preg_match('/^[a-f0-9]{64}$/', $hash)) {
         return hash_equals($hash, hash('sha256', $t));
@@ -261,7 +255,6 @@ function rate_limit(string $key, int $max, int $window): bool {
 function client_ip(): string {
     return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 }
-
 
 // ============================================================================
 //  ХЕЛПЕРЫ
@@ -418,7 +411,6 @@ function mark_day_events_seen(int $workshopId, int $membershipId, string $day): 
     return $st->rowCount();
 }
 
-
 // ============================================================================
 //  API
 // ============================================================================
@@ -430,11 +422,7 @@ function route_api(string $uri, string $method): void {
         $input = json_decode($raw, true) ?: [];
     }
 
-    // CSRF для всех небезопасных методов, кроме первого получения токена
-    $csrfExempt = [
-        '/api/session' => true, // GET
-    ];
-    if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && empty($csrfExempt[$uri])) {
+    if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && $uri !== '/api/session') {
         csrf_check();
     }
 
@@ -547,7 +535,6 @@ function route_api(string $uri, string $method): void {
         if (!$row || !verify_password($password, $row['pass_hash'])) {
             jsonOut(['ok' => false, 'error' => 'Неверный логин или пароль'], 401);
         }
-        // Миграция старого SHA-256 на bcrypt
         if (needs_rehash($row['pass_hash'])) {
             $pdo->prepare("UPDATE accounts SET pass_hash = ? WHERE id = ?")
                 ->execute([hash_password($password), $row['id']]);
@@ -679,7 +666,6 @@ function route_api(string $uri, string $method): void {
         jsonOut(['ok' => true, 'role' => $newRole]);
     }
 
-    // ---------- Workshop: update max_chat (только создатель) ----------
     if ($uri === '/api/workshops/update_max_chat' && $method === 'POST') {
         $mem = current_membership();
         if (!$mem) jsonOut(['ok' => false, 'error' => 'Нет доступа'], 403);
@@ -853,7 +839,6 @@ function route_api(string $uri, string $method): void {
     jsonOut(['ok' => false, 'error' => 'Not found', 'uri' => $uri, 'method' => $method], 404);
 }
 
-
 // ============================================================================
 //  МАРШРУТИЗАЦИЯ
 // ============================================================================
@@ -896,6 +881,7 @@ init_db();
 
 $SELF = basename(__FILE__);
 ?>
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
