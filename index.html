@@ -312,6 +312,12 @@
     background: #f0f0f0; color: #555; font-size: 20px; font-weight: 700;
     cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .ws-modal .head .close-x:active { background: #e0e0e0; }
+  .ws-modal .search-wrap { padding: 10px 14px 4px; }
+  .ws-modal .search-wrap input {
+    width: 100%; padding: 11px 14px; font-size: 15px;
+    border: 2px solid #ddd; border-radius: 12px; outline: none; background: #fafafa;
+  }
+  .ws-modal .search-wrap input:focus { border-color: #1976d2; background: #fff; }
   .ws-modal .list { flex: 1 1 auto; overflow-y: auto; padding: 12px; }
   .ws-modal .item { display: flex; justify-content: space-between; align-items: center;
     padding: 12px 14px; border: 2px solid #e0e0e0; border-radius: 14px; margin-bottom: 8px;
@@ -325,6 +331,14 @@
   .ws-modal .item .rl { font-size: 12px; color: #666; margin-top: 2px; }
   .ws-modal .item.cur .rl { color: #2e7d32; }
   .ws-modal .item .check { font-size: 20px; color: #4CAF50; flex-shrink: 0; }
+  .ws-modal .item .del-btn {
+    width: 38px; height: 38px; border: none; border-radius: 50%;
+    background: #fce4ec; color: #c62828; font-size: 18px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: transform 0.1s, background 0.15s;
+  }
+  .ws-modal .item .del-btn:active { transform: scale(0.9); background: #f8bbd0; }
+  .ws-modal .item .del-btn:hover { background: #f8bbd0; }
   .ws-modal .foot { padding: 12px; border-top: 1px solid #eee; background: #fafafa;
     display: flex; flex-direction: column; gap: 8px; }
   .ws-modal .foot button { width: 100%; padding: 13px; border-radius: 12px;
@@ -334,6 +348,34 @@
   .ws-modal .foot .cancel-btn { background: #fff; color: #555; border: 2px solid #ddd; }
   .ws-modal .foot .cancel-btn:active { background: #f0f0f0; }
   .ws-modal .empty { text-align: center; color: #999; font-size: 14px; padding: 24px 12px; font-style: italic; }
+  .ws-modal .empty-search { text-align: center; color: #999; font-size: 14px;
+    padding: 20px 12px; font-style: italic; }
+
+  /* ===== Модалка подтверждения удаления ===== */
+  .del-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+    display: none; align-items: center; justify-content: center; padding: 12px; z-index: 300; }
+  .del-modal.open { display: flex; }
+  .del-modal .box { background: #fff; border-radius: 18px; width: 100%; max-width: 420px;
+    overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.4); animation: pop 0.15s ease-out; }
+  .del-modal .box .top { padding: 20px 20px 14px; text-align: center; }
+  .del-modal .box .icon { font-size: 48px; line-height: 1; margin-bottom: 8px; }
+  .del-modal .box h3 { margin: 0 0 8px; font-size: 19px; color: #c62828; }
+  .del-modal .box .name { font-weight: 800; color: #222; font-size: 16px;
+    word-break: break-word; margin-bottom: 10px; }
+  .del-modal .box .warn { font-size: 13px; color: #666; line-height: 1.5;
+    background: #fff3cd; border: 1px solid #ffe082; border-radius: 10px;
+    padding: 10px 12px; text-align: left; }
+  .del-modal .box .warn b { color: #856404; }
+  .del-modal .box .warn ul { margin: 6px 0 0 18px; padding: 0; }
+  .del-modal .box .warn li { margin: 2px 0; }
+  .del-modal .box .btns { display: flex; gap: 8px; padding: 14px 16px 16px; }
+  .del-modal .box .btns button { flex: 1; padding: 13px; border-radius: 12px;
+    font-size: 15px; font-weight: 700; cursor: pointer; border: none; }
+  .del-modal .box .btn-cancel { background: #f0f0f0; color: #333; }
+  .del-modal .box .btn-cancel:active { background: #e0e0e0; }
+  .del-modal .box .btn-danger { background: #d32f2f; color: #fff; }
+  .del-modal .box .btn-danger:active { background: #b71c1c; }
+  .del-modal .box .btn-danger:disabled { background: #ef9a9a; cursor: wait; }
 
   @media (min-width: 560px) {
     .header h2 { font-size: 24px; }
@@ -422,6 +464,9 @@
     <div class="center"><span class="step-badge">Шаг 2 — Цех</span></div>
     <h3>Вход в цех</h3>
     <div id="workshopListWrap">
+      <div class="form-row" style="margin-bottom:6px;">
+        <input type="text" id="workshopSearch" placeholder="🔍 Поиск цеха..." autocomplete="off">
+      </div>
       <select id="workshopSelect"></select>
       <div class="form-row"><input type="password" id="workshopPass" placeholder="Пароль цеха" autocomplete="off"></div>
       <div class="form-row"><input type="text" id="membershipName" placeholder="Ваше имя в цехе" autocomplete="off"></div>
@@ -499,10 +544,38 @@
       <h3>Мои цеха</h3>
       <button class="close-x" id="wsModalClose">✕</button>
     </div>
+    <div class="search-wrap">
+      <input type="text" id="wsModalSearch" placeholder="🔍 Поиск по названию..." autocomplete="off">
+    </div>
     <div class="list" id="wsModalList"></div>
     <div class="foot">
       <button class="add-btn" id="wsModalAddBtn">+ Войти в новый цех</button>
       <button class="cancel-btn" id="wsModalCancelBtn">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА ПОДТВЕРЖДЕНИЯ УДАЛЕНИЯ -->
+<div class="del-modal" id="delModal">
+  <div class="box">
+    <div class="top">
+      <div class="icon">⚠️</div>
+      <h3>Удалить цех?</h3>
+      <div class="name" id="delModalName">—</div>
+      <div class="warn">
+        <b>Будут удалены ВСЕ данные цеха:</b>
+        <ul>
+          <li>все участники</li>
+          <li>все отметки смен</li>
+          <li>все сообщения дня</li>
+          <li>все события и «прочитано»</li>
+        </ul>
+        <div style="margin-top:6px;"><b>Действие необратимо.</b></div>
+      </div>
+    </div>
+    <div class="btns">
+      <button class="btn-cancel" id="delModalCancel">Отмена</button>
+      <button class="btn-danger" id="delModalConfirm">Удалить навсегда</button>
     </div>
   </div>
 </div>
@@ -539,6 +612,7 @@
   const accountTitle = $('accountTitle');
 
   const workshopBlock = $('workshopBlock'), workshopSelect = $('workshopSelect');
+  const workshopSearch = $('workshopSearch');
   const workshopPass = $('workshopPass'), workshopEnterBtn = $('workshopEnterBtn');
   const workshopHint = $('workshopHint');
   const workshopListWrap = $('workshopListWrap'), workshopCreateWrap = $('workshopCreateWrap');
@@ -562,7 +636,10 @@
 
   const wsModal = $('wsModal'), wsModalList = $('wsModalList');
   const wsModalClose = $('wsModalClose'), wsModalCancelBtn = $('wsModalCancelBtn');
-  const wsModalAddBtn = $('wsModalAddBtn');
+  const wsModalAddBtn = $('wsModalAddBtn'), wsModalSearch = $('wsModalSearch');
+
+  const delModal = $('delModal'), delModalName = $('delModalName');
+  const delModalCancel = $('delModalCancel'), delModalConfirm = $('delModalConfirm');
 
   const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   const today = new Date();
@@ -572,8 +649,10 @@
   let currentWorkshop = null;
   let currentMembership = null;
   let myWorkshops = [];
+  let allWorkshopsList = [];
   let allMarks = {}, msgCounts = {}, unseenByDay = {};
   let openDayKey = null;
+  let pendingDeleteWs = null;
   let unsubMarks = null, unsubMsgCounts = null, unsubEvents = null, unsubModalMsgs = null;
 
   const isCreator = () => currentWorkshop && currentAccount && currentWorkshop.createdBy === currentAccount.key;
@@ -668,7 +747,6 @@
     accPass.value = '';
     setHint(accHint, '');
   }
-  // returnToCalendar: true если пользователь уже вошёл в цех и вернулся через «Назад»
   function showWorkshopStep(returnToCalendar) {
     loadingBlock.classList.add('hidden');
     accountBlock.classList.add('hidden');
@@ -677,10 +755,10 @@
     lockCalendar(true);
     loadWorkshops();
     membershipName.value = currentAccount.login;
+    if (workshopSearch) workshopSearch.value = '';
     setHint(workshopHint, '');
     workshopCreateWrap.classList.add('hidden');
     workshopListWrap.classList.remove('hidden');
-    // Кнопка «Вернуться к календарю» видна только если уже есть активный цех
     backToCalendarBtn.classList.toggle('hidden', !(returnToCalendar && currentWorkshop));
   }
   function showLoggedIn() {
@@ -789,22 +867,47 @@
   async function loadWorkshops() {
     try {
       const snap = await get(child(ref(db), 'workshops'));
-      workshopSelect.innerHTML = '';
       if (!snap.exists()) {
-        const o = document.createElement('option');
-        o.value = ''; o.textContent = '— нет цехов, создайте первый —';
-        workshopSelect.appendChild(o); workshopEnterBtn.disabled = true;
+        allWorkshopsList = [];
+        applyWorkshopFilter('');
+        workshopEnterBtn.disabled = true;
         return;
       }
-      workshopEnterBtn.disabled = false;
       const data = snap.val();
-      Object.keys(data).forEach(key => {
-        const o = document.createElement('option');
-        o.value = key;
-        o.textContent = data[key].name || key;
-        workshopSelect.appendChild(o);
-      });
+      allWorkshopsList = Object.keys(data).map(key => ({
+        key,
+        name: data[key].name || key
+      }));
+      allWorkshopsList.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+      applyWorkshopFilter(workshopSearch ? workshopSearch.value : '');
+      workshopEnterBtn.disabled = false;
     } catch (e) { console.error(e); }
+  }
+
+  function applyWorkshopFilter(q) {
+    q = (q || '').trim().toLowerCase();
+    workshopSelect.innerHTML = '';
+    const filtered = q
+      ? allWorkshopsList.filter(w => w.name.toLowerCase().includes(q))
+      : allWorkshopsList;
+
+    if (filtered.length === 0) {
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = allWorkshopsList.length === 0
+        ? '— нет цехов, создайте первый —'
+        : '— ничего не найдено —';
+      workshopSelect.appendChild(o);
+      workshopEnterBtn.disabled = true;
+      return;
+    }
+    filtered.forEach(w => {
+      const o = document.createElement('option');
+      o.value = w.key;
+      o.textContent = w.name;
+      workshopSelect.appendChild(o);
+    });
+    workshopEnterBtn.disabled = false;
   }
 
   async function enterWorkshop() {
@@ -837,7 +940,6 @@
     } catch (e) { setHint(workshopHint, 'Ошибка сети', true); console.error(e); }
   }
 
-  // Создание цеха: одна строка "Название пароль"
   async function createWorkshop() {
     const line = newWorkshopLine.value.trim();
     if (!line) { setHint(workshopHint, 'Введите название цеха и пароль через пробел', true); return; }
@@ -883,10 +985,8 @@
     clearSession();
     showAccountStep();
   }
-  // Вернуться к календарю (если цех уже активен)
   function backToCalendar() {
     if (!currentWorkshop || !currentMembership) {
-      // нет активного цеха — показать экран цеха
       showWorkshopStep(false);
       return;
     }
@@ -897,6 +997,7 @@
   async function openWsModal() {
     wsModalList.innerHTML = '<div class="empty">Загрузка…</div>';
     wsModal.classList.add('open');
+    wsModalSearch.value = '';
     try {
       const snap = await get(child(ref(db), 'memberships'));
       const all = snap.exists() ? snap.val() : {};
@@ -916,6 +1017,7 @@
         createdBy: wsData[m.key] ? wsData[m.key].createdBy : null,
         maxChat: wsData[m.key] ? (wsData[m.key].maxChat || '') : ''
       }));
+      myWorkshops.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
       renderWsModal();
     } catch (e) {
       wsModalList.innerHTML = '<div class="empty" style="color:#d32f2f;">Ошибка загрузки</div>';
@@ -924,30 +1026,65 @@
   }
   function renderWsModal() {
     wsModalList.innerHTML = '';
+    const q = (wsModalSearch.value || '').trim().toLowerCase();
+
     if (myWorkshops.length === 0) {
       wsModalList.innerHTML = '<div class="empty">Вы пока не вошли ни в один цех.<br>Нажмите «+ Войти в новый цех» ниже.</div>';
       return;
     }
-    myWorkshops.forEach(w => {
+
+    const filtered = q
+      ? myWorkshops.filter(w =>
+          w.name.toLowerCase().includes(q) ||
+          (w.myName || '').toLowerCase().includes(q))
+      : myWorkshops;
+
+    if (filtered.length === 0) {
+      wsModalList.innerHTML = '<div class="empty-search">Ничего не найдено по запросу «' + escapeHtml(q) + '»</div>';
+      return;
+    }
+
+    filtered.forEach(w => {
       const isCur = currentWorkshop && w.key === currentWorkshop.key;
+      const isOwner = w.createdBy === currentAccount.key;
       const el = document.createElement('div');
       el.className = 'item' + (isCur ? ' cur' : '');
       const left = document.createElement('div');
       left.className = 'left';
       const nm = document.createElement('div');
       nm.className = 'nm';
-      nm.textContent = (w.createdBy === currentAccount.key ? '👑 ' : '') + w.name;
+      nm.textContent = (isOwner ? '👑 ' : '') + w.name;
       const rl = document.createElement('div');
       rl.className = 'rl';
-      rl.textContent = w.myName + ' · ' + (w.createdBy === currentAccount.key ? 'создатель' : w.role === 'admin' ? 'админ' : 'рабочий');
+      rl.textContent = w.myName + ' · ' + (isOwner ? 'создатель' : w.role === 'admin' ? 'админ' : 'рабочий');
       left.appendChild(nm); left.appendChild(rl);
       el.appendChild(left);
+
+      const right = document.createElement('div');
+      right.style.display = 'flex';
+      right.style.alignItems = 'center';
+      right.style.gap = '8px';
+      right.style.flexShrink = '0';
+
       if (isCur) {
         const check = document.createElement('div');
         check.className = 'check';
         check.textContent = '✓';
-        el.appendChild(check);
+        right.appendChild(check);
       }
+      if (isOwner) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'del-btn';
+        delBtn.textContent = '🗑';
+        delBtn.title = 'Удалить цех (только создатель)';
+        delBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          askDeleteWorkshop(w);
+        });
+        right.appendChild(delBtn);
+      }
+      el.appendChild(right);
+
       el.addEventListener('click', () => switchWorkshop(w));
       wsModalList.appendChild(el);
     });
@@ -967,8 +1104,84 @@
   function closeWsModal() { wsModal.classList.remove('open'); }
   function wsModalAddNew() {
     closeWsModal();
-    // Показать экран «Шаг 2 — Цех» с возможностью вернуться к календарю
     showWorkshopStep(true);
+  }
+
+  // ===== УДАЛЕНИЕ ЦЕХА (только создатель) =====
+  function askDeleteWorkshop(w) {
+    if (!currentAccount || w.createdBy !== currentAccount.key) {
+      alert('Удалять цех может только его создатель.');
+      return;
+    }
+    pendingDeleteWs = w;
+    delModalName.textContent = w.name;
+    delModal.classList.add('open');
+  }
+  function closeDelModal() {
+    delModal.classList.remove('open');
+    pendingDeleteWs = null;
+    delModalConfirm.disabled = false;
+    delModalConfirm.textContent = 'Удалить навсегда';
+  }
+  async function confirmDeleteWorkshop() {
+    if (!pendingDeleteWs) return;
+    const w = pendingDeleteWs;
+    if (!currentAccount || w.createdBy !== currentAccount.key) {
+      alert('Удалять цех может только его создатель.');
+      closeDelModal();
+      return;
+    }
+    delModalConfirm.disabled = true;
+    delModalConfirm.textContent = 'Удаление…';
+    try {
+      await remove(ref(db, `workshops/${w.key}`));
+      await remove(ref(db, `memberships/${w.key}`));
+      await remove(ref(db, `marks/${w.key}`));
+      await remove(ref(db, `messages/${w.key}`));
+      await remove(ref(db, `dayEvents/${w.key}`));
+      await remove(ref(db, `dayEventsSeen/${w.key}`));
+
+      const wasCurrent = currentWorkshop && currentWorkshop.key === w.key;
+      closeDelModal();
+
+      if (wasCurrent) {
+        unsubscribeAll();
+        currentWorkshop = null;
+        currentMembership = null;
+        allMarks = {}; msgCounts = {}; unseenByDay = {};
+        localStorage.removeItem('cal_ws_json');
+        localStorage.removeItem('cal_mem_json');
+
+        const snap = await get(child(ref(db), 'memberships'));
+        const all = snap.exists() ? snap.val() : {};
+        let nextKey = null;
+        Object.keys(all).forEach(k => {
+          if (!nextKey && all[k] && all[k][currentAccount.key]) nextKey = k;
+        });
+        if (nextKey) {
+          const m = all[nextKey][currentAccount.key];
+          const wSnap = await get(child(ref(db), `workshops/${nextKey}`));
+          if (wSnap.exists()) {
+            const wd = wSnap.val();
+            currentWorkshop = { key: nextKey, name: wd.name, createdBy: wd.createdBy, maxChat: wd.maxChat || '' };
+            currentMembership = { name: m.name, role: m.role || 'worker', joinedAt: m.joinedAt || Date.now() };
+            saveSession();
+            closeWsModal();
+            showLoggedIn();
+            return;
+          }
+        }
+        closeWsModal();
+        showWorkshopStep(false);
+        return;
+      }
+
+      await openWsModal();
+    } catch (e) {
+      console.error(e);
+      alert('Ошибка удаления: ' + (e.message || e));
+      closeDelModal();
+    }
   }
 
   function unsubscribeAll() {
@@ -1450,6 +1663,7 @@
 
   workshopEnterBtn.addEventListener('click', enterWorkshop);
   workshopPass.addEventListener('keydown', e => { if (e.key === 'Enter') enterWorkshop(); });
+  workshopSearch.addEventListener('input', () => applyWorkshopFilter(workshopSearch.value));
   newWorkshopLine.addEventListener('keydown', e => { if (e.key === 'Enter') createWorkshop(); });
   showCreateWorkshopBtn.addEventListener('click', showCreateWorkshopForm);
   showJoinWorkshopBtn.addEventListener('click', showJoinWorkshopForm);
@@ -1462,7 +1676,12 @@
   wsModalClose.addEventListener('click', closeWsModal);
   wsModalCancelBtn.addEventListener('click', closeWsModal);
   wsModalAddBtn.addEventListener('click', wsModalAddNew);
+  wsModalSearch.addEventListener('input', renderWsModal);
   wsModal.addEventListener('click', e => { if (e.target === wsModal) closeWsModal(); });
+
+  delModalCancel.addEventListener('click', closeDelModal);
+  delModalConfirm.addEventListener('click', confirmDeleteWorkshop);
+  delModal.addEventListener('click', e => { if (e.target === delModal) closeDelModal(); });
 
   renderCalendar();
   restoreSession();
