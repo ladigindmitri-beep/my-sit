@@ -47,10 +47,10 @@
   .logged-bar .my-phone { font-size: 12px; color: #1b5e20; font-weight: 700; margin-top: 2px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .logged-bar.admin .my-phone { color: #8d6e00; }
-  .logged-bar button { padding: 8px 14px; font-size: 14px; font-weight: 700;
+  .logged-bar button { padding: 8px 12px; font-size: 14px; font-weight: 700;
     border: none; border-radius: 10px; background: #ff5722; color: white; cursor: pointer;
     flex-shrink: 0; }
-  .logged-bar .menu-btn { background: #607d8b; }
+  .logged-bar .switch-btn { background: #1976d2; }
   .logged-bar .btns { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 
   .header { display: flex; justify-content: space-between; align-items: center;
@@ -298,20 +298,42 @@
   }
   .copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  .ws-menu { position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-    display: none; align-items: center; justify-content: center; padding: 12px; z-index: 200; }
-  .ws-menu.open { display: flex; }
-  .ws-menu .box { background: #fff; border-radius: 16px; width: 100%; max-width: 480px;
-    max-height: 85vh; overflow-y: auto; padding: 16px; }
-  .ws-menu h3 { margin: 0 0 12px; font-size: 18px; }
-  .ws-menu .item { display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; margin-bottom: 8px;
-    cursor: pointer; gap: 8px; }
-  .ws-menu .item.cur { background: #e8f5e9; border-color: #a5d6a7; }
-  .ws-menu .item .nm { font-weight: 700; font-size: 15px; }
-  .ws-menu .item .rl { font-size: 12px; color: #666; }
-  .ws-menu .close { width: 100%; padding: 12px; margin-top: 8px; border-radius: 10px;
-    border: none; background: #607d8b; color: #fff; font-weight: 700; cursor: pointer; }
+  /* ===== Модалка «Мои цеха» ===== */
+  .ws-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    display: none; align-items: center; justify-content: center; padding: 12px; z-index: 250; }
+  .ws-modal.open { display: flex; }
+  .ws-modal .box { background: #fff; border-radius: 18px; width: 100%; max-width: 480px;
+    max-height: 88vh; display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.35); animation: pop 0.15s ease-out; }
+  .ws-modal .head { padding: 16px 18px 12px; border-bottom: 1px solid #eee; display: flex;
+    justify-content: space-between; align-items: center; }
+  .ws-modal .head h3 { margin: 0; font-size: 18px; color: #222; }
+  .ws-modal .head .close-x { width: 36px; height: 36px; border: none; border-radius: 50%;
+    background: #f0f0f0; color: #555; font-size: 20px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .ws-modal .head .close-x:active { background: #e0e0e0; }
+  .ws-modal .list { flex: 1 1 auto; overflow-y: auto; padding: 12px; }
+  .ws-modal .item { display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 14px; border: 2px solid #e0e0e0; border-radius: 14px; margin-bottom: 8px;
+    cursor: pointer; gap: 10px; transition: all 0.15s; }
+  .ws-modal .item:active { transform: scale(0.98); }
+  .ws-modal .item.cur { background: #e8f5e9; border-color: #4CAF50; }
+  .ws-modal .item .left { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .ws-modal .item .nm { font-weight: 800; font-size: 16px; color: #222;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws-modal .item.cur .nm { color: #1b5e20; }
+  .ws-modal .item .rl { font-size: 12px; color: #666; margin-top: 2px; }
+  .ws-modal .item.cur .rl { color: #2e7d32; }
+  .ws-modal .item .check { font-size: 20px; color: #4CAF50; flex-shrink: 0; }
+  .ws-modal .foot { padding: 12px; border-top: 1px solid #eee; background: #fafafa;
+    display: flex; flex-direction: column; gap: 8px; }
+  .ws-modal .foot button { width: 100%; padding: 13px; border-radius: 12px;
+    font-size: 15px; font-weight: 700; cursor: pointer; border: none; }
+  .ws-modal .foot .add-btn { background: #1976d2; color: #fff; }
+  .ws-modal .foot .add-btn:active { background: #0d47a1; }
+  .ws-modal .foot .cancel-btn { background: #fff; color: #555; border: 2px solid #ddd; }
+  .ws-modal .foot .cancel-btn:active { background: #f0f0f0; }
+  .ws-modal .empty { text-align: center; color: #999; font-size: 14px; padding: 24px 12px; font-style: italic; }
 
   @media (min-width: 560px) {
     .header h2 { font-size: 24px; }
@@ -411,6 +433,7 @@
       <button class="btn-primary" id="createWorkshopBtn">Создать цех</button>
       <button class="btn-link" id="showJoinWorkshopBtn">← Назад к выбору</button>
     </div>
+    <button class="btn-link hidden" id="backToCalendarBtn">← Вернуться к календарю</button>
     <button class="btn-link" id="backToAccountBtn">← Сменить аккаунт</button>
     <div class="hint" id="workshopHint"></div>
   </div>
@@ -423,7 +446,7 @@
       <span class="my-phone hidden" id="loggedPhone"></span>
     </div>
     <div class="btns">
-      <button class="menu-btn" id="switchWsBtn" title="Мои цеха">🏭</button>
+      <button class="switch-btn" id="switchWsBtn">Сменить цех</button>
       <button id="logoutBtn">Выйти</button>
     </div>
   </div>
@@ -437,7 +460,7 @@
   <div class="days-wrap">
     <div class="days" id="days"></div>
   </div>
-  <div class="hint-bottom">💬 — сообщения. + / − — заявка на смену. 🏭 — мои цеха.</div>
+  <div class="hint-bottom">💬 — сообщения. + / − — заявка на смену. Кнопка «Сменить цех» — переход между цехами.</div>
 </div>
 
 <!-- МОДАЛКА ДНЯ -->
@@ -469,12 +492,18 @@
   </div>
 </div>
 
-<!-- МЕНЮ ЦЕХОВ -->
-<div class="ws-menu" id="wsMenu">
+<!-- МОДАЛКА «МОИ ЦЕХА» -->
+<div class="ws-modal" id="wsModal">
   <div class="box">
-    <h3>Мои цеха</h3>
-    <div id="wsMenuList"></div>
-    <button class="close" id="wsMenuClose">Закрыть</button>
+    <div class="head">
+      <h3>Мои цеха</h3>
+      <button class="close-x" id="wsModalClose">✕</button>
+    </div>
+    <div class="list" id="wsModalList"></div>
+    <div class="foot">
+      <button class="add-btn" id="wsModalAddBtn">+ Войти в новый цех</button>
+      <button class="cancel-btn" id="wsModalCancelBtn">Закрыть</button>
+    </div>
   </div>
 </div>
 
@@ -517,7 +546,7 @@
   const membershipName = $('membershipName');
   const createWorkshopBtn = $('createWorkshopBtn');
   const showCreateWorkshopBtn = $('showCreateWorkshopBtn'), showJoinWorkshopBtn = $('showJoinWorkshopBtn');
-  const backToAccountBtn = $('backToAccountBtn');
+  const backToAccountBtn = $('backToAccountBtn'), backToCalendarBtn = $('backToCalendarBtn');
 
   const loggedBar = $('loggedBar'), loggedName = $('loggedName'), loggedWorkshop = $('loggedWorkshop');
   const loggedPhone = $('loggedPhone'), logoutBtn = $('logoutBtn'), switchWsBtn = $('switchWsBtn');
@@ -531,7 +560,9 @@
   const cntMessages = $('cntMessages');
   const msgInput = $('msgInput'), msgSend = $('msgSend');
 
-  const wsMenu = $('wsMenu'), wsMenuList = $('wsMenuList'), wsMenuClose = $('wsMenuClose');
+  const wsModal = $('wsModal'), wsModalList = $('wsModalList');
+  const wsModalClose = $('wsModalClose'), wsModalCancelBtn = $('wsModalCancelBtn');
+  const wsModalAddBtn = $('wsModalAddBtn');
 
   const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   const today = new Date();
@@ -637,7 +668,8 @@
     accPass.value = '';
     setHint(accHint, '');
   }
-  function showWorkshopStep() {
+  // returnToCalendar: true если пользователь уже вошёл в цех и вернулся через «Назад»
+  function showWorkshopStep(returnToCalendar) {
     loadingBlock.classList.add('hidden');
     accountBlock.classList.add('hidden');
     workshopBlock.classList.remove('hidden');
@@ -646,6 +678,10 @@
     loadWorkshops();
     membershipName.value = currentAccount.login;
     setHint(workshopHint, '');
+    workshopCreateWrap.classList.add('hidden');
+    workshopListWrap.classList.remove('hidden');
+    // Кнопка «Вернуться к календарю» видна только если уже есть активный цех
+    backToCalendarBtn.classList.toggle('hidden', !(returnToCalendar && currentWorkshop));
   }
   function showLoggedIn() {
     loadingBlock.classList.add('hidden');
@@ -706,7 +742,7 @@
           }
         }
       }
-      showWorkshopStep();
+      showWorkshopStep(false);
     } catch (e) { console.error(e); showAccountStep(); }
   }
 
@@ -727,7 +763,7 @@
       await set(ref(db, `accountLogins/${loginKey}`), accKey);
       currentAccount = { key: accKey, login, phone, maxUsername: maxU };
       saveSession();
-      showWorkshopStep();
+      showWorkshopStep(false);
     } catch (e) { setHint(accHint, 'Ошибка сети', true); console.error(e); }
   }
 
@@ -746,7 +782,7 @@
       if (a.passHash !== await sha256(password)) { setHint(accHint, 'Неверный логин или пароль', true); return; }
       currentAccount = { key: accKey, login: a.login, phone: a.phone || '', maxUsername: a.maxUsername || '' };
       saveSession();
-      showWorkshopStep();
+      showWorkshopStep(false);
     } catch (e) { setHint(accHint, 'Ошибка сети', true); console.error(e); }
   }
 
@@ -801,7 +837,7 @@
     } catch (e) { setHint(workshopHint, 'Ошибка сети', true); console.error(e); }
   }
 
-  // Создание цеха: одна строка "Название пароль" → первое слово = название, всё остальное = пароль
+  // Создание цеха: одна строка "Название пароль"
   async function createWorkshop() {
     const line = newWorkshopLine.value.trim();
     if (!line) { setHint(workshopHint, 'Введите название цеха и пароль через пробел', true); return; }
@@ -847,12 +883,22 @@
     clearSession();
     showAccountStep();
   }
+  // Вернуться к календарю (если цех уже активен)
+  function backToCalendar() {
+    if (!currentWorkshop || !currentMembership) {
+      // нет активного цеха — показать экран цеха
+      showWorkshopStep(false);
+      return;
+    }
+    showLoggedIn();
+  }
 
-  async function openWsMenu() {
-    wsMenuList.innerHTML = '<div style="padding:8px;color:#888;">Загрузка…</div>';
-    wsMenu.classList.add('open');
+  // ===== МОДАЛКА «МОИ ЦЕХА» =====
+  async function openWsModal() {
+    wsModalList.innerHTML = '<div class="empty">Загрузка…</div>';
+    wsModal.classList.add('open');
     try {
-      const snap = await get(child(ref(db), `memberships`));
+      const snap = await get(child(ref(db), 'memberships'));
       const all = snap.exists() ? snap.val() : {};
       const mine = [];
       Object.keys(all).forEach(wsKey => {
@@ -870,36 +916,59 @@
         createdBy: wsData[m.key] ? wsData[m.key].createdBy : null,
         maxChat: wsData[m.key] ? (wsData[m.key].maxChat || '') : ''
       }));
-      renderWsMenu();
-    } catch (e) { wsMenuList.innerHTML = '<div style="color:#d32f2f;">Ошибка загрузки</div>'; }
+      renderWsModal();
+    } catch (e) {
+      wsModalList.innerHTML = '<div class="empty" style="color:#d32f2f;">Ошибка загрузки</div>';
+      console.error(e);
+    }
   }
-  function renderWsMenu() {
-    wsMenuList.innerHTML = '';
+  function renderWsModal() {
+    wsModalList.innerHTML = '';
     if (myWorkshops.length === 0) {
-      wsMenuList.innerHTML = '<div style="padding:8px;color:#888;">Нет цехов</div>'; return;
+      wsModalList.innerHTML = '<div class="empty">Вы пока не вошли ни в один цех.<br>Нажмите «+ Войти в новый цех» ниже.</div>';
+      return;
     }
     myWorkshops.forEach(w => {
+      const isCur = currentWorkshop && w.key === currentWorkshop.key;
       const el = document.createElement('div');
-      el.className = 'item' + (currentWorkshop && w.key === currentWorkshop.key ? ' cur' : '');
+      el.className = 'item' + (isCur ? ' cur' : '');
       const left = document.createElement('div');
-      const nm = document.createElement('div'); nm.className = 'nm';
+      left.className = 'left';
+      const nm = document.createElement('div');
+      nm.className = 'nm';
       nm.textContent = (w.createdBy === currentAccount.key ? '👑 ' : '') + w.name;
-      const rl = document.createElement('div'); rl.className = 'rl';
+      const rl = document.createElement('div');
+      rl.className = 'rl';
       rl.textContent = w.myName + ' · ' + (w.createdBy === currentAccount.key ? 'создатель' : w.role === 'admin' ? 'админ' : 'рабочий');
       left.appendChild(nm); left.appendChild(rl);
       el.appendChild(left);
+      if (isCur) {
+        const check = document.createElement('div');
+        check.className = 'check';
+        check.textContent = '✓';
+        el.appendChild(check);
+      }
       el.addEventListener('click', () => switchWorkshop(w));
-      wsMenuList.appendChild(el);
+      wsModalList.appendChild(el);
     });
   }
   async function switchWorkshop(w) {
-    if (currentWorkshop && w.key === currentWorkshop.key) { wsMenu.classList.remove('open'); return; }
+    if (currentWorkshop && w.key === currentWorkshop.key) {
+      closeWsModal();
+      return;
+    }
     unsubscribeAll();
     currentWorkshop = { key: w.key, name: w.name, createdBy: w.createdBy, maxChat: w.maxChat };
     currentMembership = { name: w.myName, role: w.role, joinedAt: Date.now() };
     saveSession();
-    wsMenu.classList.remove('open');
+    closeWsModal();
     showLoggedIn();
+  }
+  function closeWsModal() { wsModal.classList.remove('open'); }
+  function wsModalAddNew() {
+    closeWsModal();
+    // Показать экран «Шаг 2 — Цех» с возможностью вернуться к календарю
+    showWorkshopStep(true);
   }
 
   function unsubscribeAll() {
@@ -1386,10 +1455,14 @@
   showJoinWorkshopBtn.addEventListener('click', showJoinWorkshopForm);
   createWorkshopBtn.addEventListener('click', createWorkshop);
   backToAccountBtn.addEventListener('click', backToAccount);
+  backToCalendarBtn.addEventListener('click', backToCalendar);
   logoutBtn.addEventListener('click', backToAccount);
-  switchWsBtn.addEventListener('click', openWsMenu);
-  wsMenuClose.addEventListener('click', () => wsMenu.classList.remove('open'));
-  wsMenu.addEventListener('click', e => { if (e.target === wsMenu) wsMenu.classList.remove('open'); });
+
+  switchWsBtn.addEventListener('click', openWsModal);
+  wsModalClose.addEventListener('click', closeWsModal);
+  wsModalCancelBtn.addEventListener('click', closeWsModal);
+  wsModalAddBtn.addEventListener('click', wsModalAddNew);
+  wsModal.addEventListener('click', e => { if (e.target === wsModal) closeWsModal(); });
 
   renderCalendar();
   restoreSession();
