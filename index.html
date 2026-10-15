@@ -1,894 +1,10 @@
-<?php
-/**
- * Календарь смен — один файл.
- * PHP + SQLite + HTML/CSS/JS + сессии.
- *
- * Модель:
- *   accounts        — аккаунт (логин + пароль, глобально уникальный логин)
- *   workshops       — группа (цех/склад), имя динамическое, + max_chat
- *   memberships     — членство аккаунта в группе (имя в группе, роль)
- *   marks           — смены (привязаны к membership)
- *   messages        — сообщения дня (привязаны к membership)
- *   day_events      — события дня ('removed' — кто-то снялся)
- *   day_events_seen — кто уже увидел событие
- *
- * Админ — только создатель группы (workshops.created_by).
- * «Мигание» дня после снятия — персональное, гаснет при просмотре дня.
- */
-
-// ============================================================================
-//  НАСТРОЙКИ (правьте здесь, а не в середине файла)
-// ============================================================================
-const APP_DEBUG        = false;
-const APP_TIMEZONE     = 'Europe/Moscow';
-const APP_SESSION_NAME = 'calendar_sid';
-const APP_SESSION_DAYS = 30;
-const DB_PATH          = __DIR__ . '/calendar.db';
-const LOG_PATH         = __DIR__ . '/calendar-errors.log';
-const RATE_LIMIT_LOGIN_MAX    = 10;
-const RATE_LIMIT_LOGIN_WINDOW = 300;
-
-// ============================================================================
-//  ИНИЦИАЛИЗАЦИЯ
-// ============================================================================
-date_default_timezone_set(APP_TIMEZONE);
-error_reporting(E_ALL);
-ini_set('display_errors', APP_DEBUG ? '1' : '0');
-ini_set('log_errors', '1');
-ini_set('error_log', LOG_PATH);
-
-session_set_cookie_params([
-    'lifetime' => APP_SESSION_DAYS * 86400,
-    'path'     => '/',
-    'httponly' => true,
-    'samesite' => 'Lax',
-    'secure'   => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
-]);
-session_name(APP_SESSION_NAME);
-session_start();
-
-// Первый запуск: защищаем директорию от чтения БД через веб
-(function () {
-    $ht = __DIR__ . '/.htaccess';
-    if (!file_exists($ht)) {
-        @file_put_contents($ht, "Require all denied\n");
-    }
-    $gi = __DIR__ . '/.gitignore';
-    if (!file_exists($gi)) {
-        @file_put_contents($gi, "calendar.db\ncalendar.db-journal\ncalendar.db-wal\ncalendar.db-shm\ncalendar-errors.log\n.htaccess\n");
-    }
-})();
-
-// ============================================================================
-//  БАЗА ДАННЫХ
-// ============================================================================
-function db(): PDO {
-    static $pdo = null;
-    if ($pdo === null) {
-        $pdo = new PDO('sqlite:' . DB_PATH);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-        $pdo->exec('PRAGMA foreign_keys = ON');
-    }
-    return $pdo;
-}
-
-function table_exists(PDO $pdo, string $name): bool {
-    $st = $pdo->prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?");
-    $st->execute([$name]);
-    return (bool)$st->fetch();
-}
-
-function column_exists(PDO $pdo, string $table, string $column): bool {
-    $st = $pdo->prepare("PRAGMA table_info($table)");
-    $st->execute();
-    foreach ($st->fetchAll() as $r) if ($r['name'] === $column) return true;
-    return false;
-}
-
-function init_db(): void {
-    $pdo = db();
-
-    $needRebuild = false;
-    if (table_exists($pdo, 'users')) $needRebuild = true;
-    if (table_exists($pdo, 'marks') && !column_exists($pdo, 'marks', 'membership_id')) $needRebuild = true;
-
-    if ($needRebuild) {
-        $pdo->exec("
-            DROP TABLE IF EXISTS day_events_seen;
-            DROP TABLE IF EXISTS day_events;
-            DROP TABLE IF EXISTS messages;
-            DROP TABLE IF EXISTS marks;
-            DROP TABLE IF EXISTS memberships;
-            DROP TABLE IF EXISTS users;
-            DROP TABLE IF EXISTS accounts;
-            DROP TABLE IF EXISTS workshops;
-        ");
-    }
-
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS accounts (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            login        TEXT UNIQUE NOT NULL,
-            pass_hash    TEXT NOT NULL,
-            phone        TEXT NOT NULL DEFAULT '',
-            max_username TEXT NOT NULL DEFAULT '',
-            created_at   TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-
-        CREATE TABLE IF NOT EXISTS workshops (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            name       TEXT UNIQUE NOT NULL,
-            pass_hash  TEXT NOT NULL,
-            max_chat   TEXT NOT NULL DEFAULT '',
-            created_by INTEGER,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (created_by) REFERENCES accounts(id) ON DELETE SET NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS memberships (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id  INTEGER NOT NULL,
-            workshop_id INTEGER NOT NULL,
-            name        TEXT NOT NULL,
-            role        TEXT NOT NULL DEFAULT 'worker',
-            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(account_id, workshop_id),
-            UNIQUE(workshop_id, name),
-            FOREIGN KEY (account_id)  REFERENCES accounts(id)  ON DELETE CASCADE,
-            FOREIGN KEY (workshop_id) REFERENCES workshops(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS marks (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            workshop_id   INTEGER NOT NULL,
-            membership_id INTEGER NOT NULL,
-            day           TEXT NOT NULL,
-            status        TEXT NOT NULL DEFAULT 'approved',
-            UNIQUE(membership_id, day),
-            FOREIGN KEY (workshop_id)   REFERENCES workshops(id)   ON DELETE CASCADE,
-            FOREIGN KEY (membership_id) REFERENCES memberships(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS messages (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            workshop_id   INTEGER NOT NULL,
-            membership_id INTEGER NOT NULL,
-            day           TEXT NOT NULL,
-            text          TEXT NOT NULL,
-            created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (workshop_id)   REFERENCES workshops(id)   ON DELETE CASCADE,
-            FOREIGN KEY (membership_id) REFERENCES memberships(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS day_events (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            workshop_id INTEGER NOT NULL,
-            day         TEXT NOT NULL,
-            kind        TEXT NOT NULL DEFAULT 'removed',
-            actor_mid   INTEGER NOT NULL,
-            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (workshop_id) REFERENCES workshops(id)   ON DELETE CASCADE,
-            FOREIGN KEY (actor_mid)   REFERENCES memberships(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS day_events_seen (
-            event_id      INTEGER NOT NULL,
-            membership_id INTEGER NOT NULL,
-            seen_at       TEXT NOT NULL DEFAULT (datetime('now')),
-            PRIMARY KEY (event_id, membership_id),
-            FOREIGN KEY (event_id)      REFERENCES day_events(id)  ON DELETE CASCADE,
-            FOREIGN KEY (membership_id) REFERENCES memberships(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_messages_ws_day     ON messages(workshop_id, day);
-        CREATE INDEX IF NOT EXISTS idx_marks_ws_day        ON marks(workshop_id, day);
-        CREATE INDEX IF NOT EXISTS idx_memberships_acc     ON memberships(account_id);
-        CREATE INDEX IF NOT EXISTS idx_day_events_ws_day   ON day_events(workshop_id, day);
-        CREATE INDEX IF NOT EXISTS idx_day_events_seen_mem ON day_events_seen(membership_id);
-    ");
-
-    if (!column_exists($pdo, 'workshops', 'max_chat')) {
-        try { $pdo->exec("ALTER TABLE workshops ADD COLUMN max_chat TEXT NOT NULL DEFAULT ''"); }
-        catch (Exception $e) {}
-    }
-
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS rate_limit (
-            key        TEXT PRIMARY KEY,
-            count      INTEGER NOT NULL DEFAULT 0,
-            reset_at   INTEGER NOT NULL
-        );
-    ");
-}
-
-// ============================================================================
-//  БЕЗОПАСНОСТЬ
-// ============================================================================
-function hash_password(string $t): string {
-    return password_hash($t, PASSWORD_DEFAULT);
-}
-
-function verify_password(string $t, string $hash): bool {
-    if (preg_match('/^[a-f0-9]{64}$/', $hash)) {
-        return hash_equals($hash, hash('sha256', $t));
-    }
-    return password_verify($t, $hash);
-}
-
-function needs_rehash(string $hash): bool {
-    if (preg_match('/^[a-f0-9]{64}$/', $hash)) return true;
-    return password_needs_rehash($hash, PASSWORD_DEFAULT);
-}
-
-function csrf_token(): string {
-    if (empty($_SESSION['csrf'])) {
-        $_SESSION['csrf'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf'];
-}
-
-function csrf_check(): void {
-    $sent = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (!hash_equals($_SESSION['csrf'] ?? '', $sent)) {
-        jsonOut(['ok' => false, 'error' => 'CSRF token invalid'], 403);
-    }
-}
-
-function rate_limit(string $key, int $max, int $window): bool {
-    $pdo = db();
-    $now = time();
-    $st = $pdo->prepare("SELECT count, reset_at FROM rate_limit WHERE key = ?");
-    $st->execute([$key]);
-    $row = $st->fetch();
-    if (!$row || $row['reset_at'] < $now) {
-        $pdo->prepare("INSERT INTO rate_limit (key, count, reset_at) VALUES (?, 1, ?)
-                       ON CONFLICT(key) DO UPDATE SET count = 1, reset_at = excluded.reset_at")
-            ->execute([$key, $now + $window]);
-        return true;
-    }
-    if ((int)$row['count'] >= $max) return false;
-    $pdo->prepare("UPDATE rate_limit SET count = count + 1 WHERE key = ?")->execute([$key]);
-    return true;
-}
-
-function client_ip(): string {
-    return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-}
-
-// ============================================================================
-//  ХЕЛПЕРЫ
-// ============================================================================
-function normalizePhone(string $raw): string {
-    if ($raw === '') return '';
-    return preg_replace('/\D/', '', $raw);
-}
-
-function formatPhone(string $d): string {
-    if ($d === '') return '';
-    if (strlen($d) === 11 && $d[0] === '8') $d = '7' . substr($d, 1);
-    if (strlen($d) === 11 && $d[0] === '7') {
-        return '+7 ' . substr($d,1,3) . ' ' . substr($d,4,3) . '-' . substr($d,7,2) . '-' . substr($d,9,2);
-    }
-    if (strlen($d) === 10) {
-        return '+7 ' . substr($d,0,3) . ' ' . substr($d,3,3) . '-' . substr($d,6,2) . '-' . substr($d,8,2);
-    }
-    return '+' . $d;
-}
-
-function cleanMaxUsername(string $raw): string {
-    $raw = trim($raw);
-    if ($raw === '') return '';
-    if (preg_match('~max\.ru/(?:u/)?([^/?\s]+)~', $raw, $m)) return $m[1];
-    return preg_replace('/[^A-Za-z0-9_.]/', '', $raw);
-}
-
-function cleanMaxChat(string $raw): string {
-    $raw = trim($raw);
-    if ($raw === '') return '';
-    if (preg_match('~max\.ru/([^?\s#]+)~i', $raw, $m)) {
-        return $m[1];
-    }
-    return preg_replace('/[^A-Za-z0-9_./-]/', '', $raw);
-}
-
-function maxChatUrl(string $raw): string {
-    $raw = trim($raw);
-    if ($raw === '') return '';
-    if (preg_match('~^https?://~i', $raw)) return $raw;
-    return 'https://max.ru/' . ltrim($raw, '/');
-}
-
-function jsonOut(array $data, int $code = 200): void {
-    http_response_code($code);
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($data, JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-function current_account(): ?array {
-    $aid = $_SESSION['account_id'] ?? null;
-    if (!$aid) return null;
-    $st = db()->prepare("SELECT id, login, phone, max_username FROM accounts WHERE id = ?");
-    $st->execute([$aid]);
-    $row = $st->fetch();
-    return $row ?: null;
-}
-
-function current_workshop(): ?array {
-    $wid = $_SESSION['workshop_id'] ?? null;
-    if (!$wid) return null;
-    $st = db()->prepare("SELECT id, name, created_by, max_chat FROM workshops WHERE id = ?");
-    $st->execute([$wid]);
-    $row = $st->fetch();
-    return $row ?: null;
-}
-
-function current_membership(): ?array {
-    $aid = $_SESSION['account_id'] ?? null;
-    $wid = $_SESSION['workshop_id'] ?? null;
-    if (!$aid || !$wid) return null;
-    $st = db()->prepare("
-        SELECT m.id, m.account_id, m.workshop_id, m.name, m.role,
-               a.login, a.phone, a.max_username
-        FROM memberships m
-        JOIN accounts a ON a.id = m.account_id
-        WHERE m.account_id = ? AND m.workshop_id = ?
-    ");
-    $st->execute([$aid, $wid]);
-    $row = $st->fetch();
-    return $row ?: null;
-}
-
-function is_creator_of_current_workshop(): bool {
-    $acc = current_account();
-    $ws  = current_workshop();
-    if (!$acc || !$ws) return false;
-    return (int)$ws['created_by'] === (int)$acc['id'];
-}
-
-function account_to_json(array $r): array {
-    return [
-        'id' => (int)$r['id'],
-        'login' => $r['login'],
-        'phone' => $r['phone'] ?? '',
-        'phone_fmt' => formatPhone($r['phone'] ?? ''),
-        'max_username' => $r['max_username'] ?? '',
-    ];
-}
-
-function membership_to_json(array $r): array {
-    return [
-        'id' => (int)$r['id'],
-        'account_id' => (int)$r['account_id'],
-        'workshop_id' => (int)$r['workshop_id'],
-        'name' => $r['name'],
-        'role' => $r['role'] ?? 'worker',
-        'phone' => $r['phone'] ?? '',
-        'phone_fmt' => formatPhone($r['phone'] ?? ''),
-        'max_username' => $r['max_username'] ?? '',
-        'login' => $r['login'] ?? '',
-    ];
-}
-
-function workshop_to_json(array $r): array {
-    $mc = $r['max_chat'] ?? '';
-    return [
-        'id'         => (int)$r['id'],
-        'name'       => $r['name'],
-        'created_by' => (int)($r['created_by'] ?? 0),
-        'max_chat'   => $mc,
-        'max_chat_url' => maxChatUrl($mc),
-    ];
-}
-
-function unseen_events_by_day(int $workshopId, int $membershipId): array {
-    $pdo = db();
-    $st = $pdo->prepare("
-        SELECT e.day, COUNT(*) AS cnt
-        FROM day_events e
-        LEFT JOIN day_events_seen s
-               ON s.event_id = e.id AND s.membership_id = :mid
-        WHERE e.workshop_id = :wid
-          AND s.event_id IS NULL
-        GROUP BY e.day
-    ");
-    $st->execute([':mid' => $membershipId, ':wid' => $workshopId]);
-    $out = [];
-    foreach ($st->fetchAll() as $r) $out[$r['day']] = (int)$r['cnt'];
-    return $out;
-}
-
-function mark_day_events_seen(int $workshopId, int $membershipId, string $day): int {
-    $pdo = db();
-    $st = $pdo->prepare("
-        INSERT OR IGNORE INTO day_events_seen (event_id, membership_id)
-        SELECT e.id, :mid
-        FROM day_events e
-        WHERE e.workshop_id = :wid AND e.day = :day
-    ");
-    $st->execute([':mid' => $membershipId, ':wid' => $workshopId, ':day' => $day]);
-    return $st->rowCount();
-}
-
-// ============================================================================
-//  API
-// ============================================================================
-function route_api(string $uri, string $method): void {
-    $pdo = db();
-    $input = [];
-    if (in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
-        $raw = file_get_contents('php://input');
-        $input = json_decode($raw, true) ?: [];
-    }
-
-    if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && $uri !== '/api/session') {
-        csrf_check();
-    }
-
-    // ---------- Session ----------
-    if ($uri === '/api/session' && $method === 'GET') {
-        $result = [
-            'account' => null, 'workshop' => null, 'membership' => null,
-            'my_workshops' => [], 'csrf' => csrf_token()
-        ];
-
-        $acc = current_account();
-        if ($acc) {
-            $result['account'] = account_to_json($acc);
-
-            $st = $pdo->prepare("
-                SELECT m.id, m.workshop_id, m.name, m.role, w.name AS ws_name
-                FROM memberships m
-                JOIN workshops w ON w.id = m.workshop_id
-                WHERE m.account_id = ?
-                ORDER BY w.name
-            ");
-            $st->execute([$acc['id']]);
-            foreach ($st->fetchAll() as $r) {
-                $result['my_workshops'][] = [
-                    'membership_id' => (int)$r['id'],
-                    'workshop_id'   => (int)$r['workshop_id'],
-                    'workshop_name' => $r['ws_name'],
-                    'name'          => $r['name'],
-                    'role'          => $r['role'],
-                ];
-            }
-
-            $ws = current_workshop();
-            if ($ws) {
-                $result['workshop'] = workshop_to_json($ws);
-                $mem = current_membership();
-                if ($mem) $result['membership'] = membership_to_json($mem);
-            }
-        } else {
-            unset($_SESSION['workshop_id']);
-        }
-
-        jsonOut($result);
-    }
-
-    if ($uri === '/api/session/logout' && $method === 'POST') {
-        $_SESSION = [];
-        if (ini_get('session.use_cookies')) {
-            $p = session_get_cookie_params();
-            setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
-        }
-        session_destroy();
-        jsonOut(['ok' => true]);
-    }
-
-    if ($uri === '/api/session/leave_workshop' && $method === 'POST') {
-        unset($_SESSION['workshop_id']);
-        jsonOut(['ok' => true]);
-    }
-
-    if ($uri === '/api/session/switch_workshop' && $method === 'POST') {
-        $aid = $_SESSION['account_id'] ?? null;
-        if (!$aid) jsonOut(['ok' => false, 'error' => 'Не авторизован'], 401);
-        $wid = (int)($input['workshop_id'] ?? 0);
-        $st = $pdo->prepare("SELECT id FROM memberships WHERE account_id = ? AND workshop_id = ?");
-        $st->execute([$aid, $wid]);
-        if (!$st->fetch()) jsonOut(['ok' => false, 'error' => 'Нет членства в этой группе'], 403);
-        $_SESSION['workshop_id'] = $wid;
-        jsonOut(['ok' => true]);
-    }
-
-    // ---------- Accounts ----------
-    if ($uri === '/api/accounts/register' && $method === 'POST') {
-        if (!rate_limit('reg:' . client_ip(), RATE_LIMIT_LOGIN_MAX, RATE_LIMIT_LOGIN_WINDOW)) {
-            jsonOut(['ok' => false, 'error' => 'Слишком много попыток. Подождите.'], 429);
-        }
-        $login = trim($input['login'] ?? '');
-        $password = $input['password'] ?? '';
-        if ($login === '' || mb_strlen($login) < 2) {
-            jsonOut(['ok' => false, 'error' => 'Логин минимум 2 символа'], 400);
-        }
-        if (mb_strlen($password) < 3) {
-            jsonOut(['ok' => false, 'error' => 'Пароль минимум 3 символа'], 400);
-        }
-        $st = $pdo->prepare("SELECT id FROM accounts WHERE login = ?");
-        $st->execute([$login]);
-        if ($st->fetch()) jsonOut(['ok' => false, 'error' => 'Такой логин уже занят'], 409);
-
-        $st = $pdo->prepare("INSERT INTO accounts (login, pass_hash) VALUES (?, ?)");
-        $st->execute([$login, hash_password($password)]);
-        $aid = (int)$pdo->lastInsertId();
-
-        $_SESSION['account_id'] = $aid;
-        unset($_SESSION['workshop_id']);
-
-        $st = $pdo->prepare("SELECT id, login, phone, max_username FROM accounts WHERE id = ?");
-        $st->execute([$aid]);
-        jsonOut(['ok' => true, 'account' => account_to_json($st->fetch()), 'csrf' => csrf_token()]);
-    }
-
-    if ($uri === '/api/accounts/login' && $method === 'POST') {
-        $login = trim($input['login'] ?? '');
-        $password = $input['password'] ?? '';
-        if (!rate_limit('login:' . client_ip() . ':' . $login, RATE_LIMIT_LOGIN_MAX, RATE_LIMIT_LOGIN_WINDOW)) {
-            jsonOut(['ok' => false, 'error' => 'Слишком много попыток. Подождите.'], 429);
-        }
-        $st = $pdo->prepare("SELECT id, login, phone, max_username, pass_hash FROM accounts WHERE login = ?");
-        $st->execute([$login]);
-        $row = $st->fetch();
-        if (!$row || !verify_password($password, $row['pass_hash'])) {
-            jsonOut(['ok' => false, 'error' => 'Неверный логин или пароль'], 401);
-        }
-        if (needs_rehash($row['pass_hash'])) {
-            $pdo->prepare("UPDATE accounts SET pass_hash = ? WHERE id = ?")
-                ->execute([hash_password($password), $row['id']]);
-        }
-        $_SESSION['account_id'] = (int)$row['id'];
-        unset($_SESSION['workshop_id']);
-        jsonOut(['ok' => true, 'account' => account_to_json($row), 'csrf' => csrf_token()]);
-    }
-
-    if ($uri === '/api/accounts/update' && $method === 'POST') {
-        $acc = current_account();
-        if (!$acc) jsonOut(['ok' => false, 'error' => 'Не авторизован'], 401);
-        $phone = normalizePhone(trim($input['phone'] ?? ''));
-        $maxU  = cleanMaxUsername(trim($input['max_username'] ?? ''));
-        if ($phone !== '' && strlen($phone) < 10) {
-            jsonOut(['ok' => false, 'error' => 'Телефон слишком короткий'], 400);
-        }
-        $pdo->prepare("UPDATE accounts SET phone = ?, max_username = ? WHERE id = ?")
-            ->execute([$phone, $maxU, $acc['id']]);
-        $st = $pdo->prepare("SELECT id, login, phone, max_username FROM accounts WHERE id = ?");
-        $st->execute([$acc['id']]);
-        jsonOut(['ok' => true, 'account' => account_to_json($st->fetch())]);
-    }
-
-    // ---------- Workshops ----------
-    if ($uri === '/api/workshops' && $method === 'GET') {
-        $rows = $pdo->query("SELECT id, name, max_chat FROM workshops ORDER BY name")->fetchAll();
-        jsonOut(array_map(fn($r) => [
-            'id' => (int)$r['id'],
-            'name' => $r['name'],
-            'max_chat' => $r['max_chat'] ?? '',
-            'max_chat_url' => maxChatUrl($r['max_chat'] ?? ''),
-        ], $rows));
-    }
-
-    if ($uri === '/api/workshops' && $method === 'POST') {
-        $acc = current_account();
-        if (!$acc) jsonOut(['ok' => false, 'error' => 'Сначала войдите в аккаунт'], 401);
-
-        $name = trim($input['name'] ?? '');
-        $password = (string)($input['password'] ?? '');
-        $asAdmin = !empty($input['as_admin']);
-        $maxChat = cleanMaxChat((string)($input['max_chat'] ?? ''));
-
-        if ($name === '') jsonOut(['ok' => false, 'error' => 'Введите название'], 400);
-        if (mb_strlen($password) < 3) jsonOut(['ok' => false, 'error' => 'Пароль минимум 3 символа'], 400);
-
-        $st = $pdo->prepare("SELECT id FROM workshops WHERE name = ?");
-        $st->execute([$name]);
-        if ($st->fetch()) jsonOut(['ok' => false, 'error' => 'Группа с таким названием уже есть'], 409);
-
-        $st = $pdo->prepare("INSERT INTO workshops (name, pass_hash, max_chat, created_by) VALUES (?, ?, ?, ?)");
-        $st->execute([$name, hash_password($password), $maxChat, $acc['id']]);
-        $wid = (int)$pdo->lastInsertId();
-
-        $role = $asAdmin ? 'admin' : 'worker';
-        $st = $pdo->prepare("INSERT INTO memberships (account_id, workshop_id, name, role) VALUES (?, ?, ?, ?)");
-        $st->execute([$acc['id'], $wid, $acc['login'], $role]);
-        $mid = (int)$pdo->lastInsertId();
-
-        $_SESSION['workshop_id'] = $wid;
-
-        $st = $pdo->prepare("SELECT id, name, max_chat, created_by FROM workshops WHERE id = ?");
-        $st->execute([$wid]);
-        $wrow = $st->fetch();
-
-        jsonOut(['ok' => true, 'workshop' => workshop_to_json($wrow), 'membership_id' => $mid]);
-    }
-
-    if ($uri === '/api/workshops/login' && $method === 'POST') {
-        $acc = current_account();
-        if (!$acc) jsonOut(['ok' => false, 'error' => 'Сначала войдите в аккаунт'], 401);
-
-        $name = trim($input['name'] ?? '');
-        $password = (string)($input['password'] ?? '');
-        $asName = trim($input['as_name'] ?? '');
-        if ($asName === '') $asName = $acc['login'];
-
-        $st = $pdo->prepare("SELECT id, name, pass_hash, created_by, max_chat FROM workshops WHERE name = ?");
-        $st->execute([$name]);
-        $w = $st->fetch();
-        if (!$w || !verify_password($password, $w['pass_hash'])) {
-            jsonOut(['ok' => false, 'error' => 'Неверное название или пароль группы'], 401);
-        }
-        $wid = (int)$w['id'];
-
-        $st = $pdo->prepare("SELECT id, name, role FROM memberships WHERE account_id = ? AND workshop_id = ?");
-        $st->execute([$acc['id'], $wid]);
-        $mem = $st->fetch();
-        if (!$mem) {
-            $st = $pdo->prepare("SELECT id FROM memberships WHERE workshop_id = ? AND name = ?");
-            $st->execute([$wid, $asName]);
-            if ($st->fetch()) jsonOut(['ok' => false, 'error' => 'Это имя в группе уже занято'], 409);
-
-            $st = $pdo->prepare("INSERT INTO memberships (account_id, workshop_id, name, role) VALUES (?, ?, ?, 'worker')");
-            $st->execute([$acc['id'], $wid, $asName]);
-            $mid = (int)$pdo->lastInsertId();
-        } else {
-            $mid = (int)$mem['id'];
-        }
-
-        $_SESSION['workshop_id'] = $wid;
-        jsonOut(['ok' => true, 'workshop' => workshop_to_json($w), 'membership_id' => $mid]);
-    }
-
-    // ---------- Memberships ----------
-    if ($uri === '/api/memberships/rename' && $method === 'POST') {
-        $mem = current_membership();
-        if (!$mem) jsonOut(['ok' => false, 'error' => 'Нет доступа'], 403);
-        $newName = trim($input['name'] ?? '');
-        if ($newName === '') jsonOut(['ok' => false, 'error' => 'Пустое имя'], 400);
-
-        $st = $pdo->prepare("SELECT id FROM memberships WHERE workshop_id = ? AND name = ? AND id != ?");
-        $st->execute([$mem['workshop_id'], $newName, $mem['id']]);
-        if ($st->fetch()) jsonOut(['ok' => false, 'error' => 'Это имя уже занято'], 409);
-
-        $pdo->prepare("UPDATE memberships SET name = ? WHERE id = ?")->execute([$newName, $mem['id']]);
-        jsonOut(['ok' => true]);
-    }
-
-    if ($uri === '/api/memberships/toggle_admin' && $method === 'POST') {
-        $mem = current_membership();
-        if (!$mem) jsonOut(['ok' => false, 'error' => 'Нет доступа'], 403);
-        if (!is_creator_of_current_workshop()) {
-            jsonOut(['ok' => false, 'error' => 'Только создатель группы может менять роль админа'], 403);
-        }
-        $newRole = ($mem['role'] === 'admin') ? 'worker' : 'admin';
-        $pdo->prepare("UPDATE memberships SET role = ? WHERE id = ?")->execute([$newRole, $mem['id']]);
-        jsonOut(['ok' => true, 'role' => $newRole]);
-    }
-
-    if ($uri === '/api/workshops/update_max_chat' && $method === 'POST') {
-        $mem = current_membership();
-        if (!$mem) jsonOut(['ok' => false, 'error' => 'Нет доступа'], 403);
-        if (!is_creator_of_current_workshop()) {
-            jsonOut(['ok' => false, 'error' => 'Только создатель группы может менять MAX-чат'], 403);
-        }
-        $maxChat = cleanMaxChat((string)($input['max_chat'] ?? ''));
-        $pdo->prepare("UPDATE workshops SET max_chat = ? WHERE id = ?")->execute([$maxChat, $mem['workshop_id']]);
-        jsonOut(['ok' => true, 'max_chat' => $maxChat, 'max_chat_url' => maxChatUrl($maxChat)]);
-    }
-
-    // ---------- Marks: GET ----------
-    if (preg_match('~^/api/workshops/(\d+)/marks$~', $uri, $m) && $method === 'GET') {
-        $wid = (int)$m[1];
-
-        $st = $pdo->prepare("
-            SELECT mk.day, mk.status,
-                   mm.id AS membership_id, mm.name, mm.role,
-                   a.phone, a.max_username
-            FROM marks mk
-            JOIN memberships mm ON mm.id = mk.membership_id
-            JOIN accounts    a  ON a.id  = mm.account_id
-            WHERE mk.workshop_id = ?
-            ORDER BY mk.day
-        ");
-        $st->execute([$wid]);
-        $result = [];
-        foreach ($st->fetchAll() as $row) {
-            $result[$row['day']][(string)$row['membership_id']] = [
-                'name' => $row['name'],
-                'phone' => $row['phone'] ?? '',
-                'phone_fmt' => formatPhone($row['phone'] ?? ''),
-                'max_username' => $row['max_username'] ?? '',
-                'role' => $row['role'] ?? 'worker',
-                'status' => $row['status'] ?? 'approved',
-            ];
-        }
-
-        $mem = current_membership();
-        $unseen = ($mem && (int)$mem['workshop_id'] === $wid)
-            ? unseen_events_by_day($wid, (int)$mem['id'])
-            : [];
-
-        jsonOut(['marks' => $result, 'unseen' => $unseen]);
-    }
-
-    // ---------- Marks: toggle ----------
-    if (preg_match('~^/api/workshops/(\d+)/marks/toggle$~', $uri, $m) && $method === 'POST') {
-        $wid = (int)$m[1];
-        $mem = current_membership();
-        if (!$mem || (int)$mem['workshop_id'] !== $wid) jsonOut(['ok' => false, 'error' => 'Нет доступа'], 403);
-
-        $day = trim($input['day'] ?? '');
-        if ($day === '') jsonOut(['ok' => false, 'error' => 'Нет даты'], 400);
-        if (!preg_match('~^\d{4}-\d{2}-\d{2}$~', $day)) jsonOut(['ok' => false, 'error' => 'Неверный формат даты'], 400);
-
-        $st = $pdo->prepare("SELECT id, status FROM marks WHERE membership_id = ? AND day = ?");
-        $st->execute([$mem['id'], $day]);
-        $row = $st->fetch();
-
-        if ($row) {
-            $pdo->beginTransaction();
-            $pdo->prepare("DELETE FROM marks WHERE id = ?")->execute([$row['id']]);
-            $pdo->prepare("INSERT INTO day_events (workshop_id, day, kind, actor_mid) VALUES (?, ?, 'removed', ?)")
-                ->execute([$wid, $day, $mem['id']]);
-            $eventId = (int)$pdo->lastInsertId();
-            $pdo->prepare("INSERT OR IGNORE INTO day_events_seen (event_id, membership_id) VALUES (?, ?)")
-                ->execute([$eventId, $mem['id']]);
-            $pdo->commit();
-            $action = 'removed';
-        } else {
-            $status = ($mem['role'] === 'admin') ? 'approved' : 'pending';
-            $pdo->prepare("INSERT INTO marks (workshop_id, membership_id, day, status) VALUES (?, ?, ?, ?)")
-                ->execute([$wid, $mem['id'], $day, $status]);
-            $action = 'added';
-        }
-        jsonOut(['ok' => true, 'action' => $action]);
-    }
-
-    // ---------- Marks: set_status ----------
-    if (preg_match('~^/api/workshops/(\d+)/marks/set_status$~', $uri, $m) && $method === 'POST') {
-        $wid = (int)$m[1];
-        $mem = current_membership();
-        if (!$mem || (int)$mem['workshop_id'] !== $wid) jsonOut(['ok' => false, 'error' => 'Нет доступа'], 403);
-        if ($mem['role'] !== 'admin') jsonOut(['ok' => false, 'error' => 'Только админ'], 403);
-
-        $membership_id = (int)($input['membership_id'] ?? 0);
-        $day = trim($input['day'] ?? '');
-        $status = (string)($input['status'] ?? '');
-        if (!in_array($status, ['approved', 'rejected', 'pending'], true)) {
-            jsonOut(['ok' => false, 'error' => 'Неверный статус'], 400);
-        }
-        if (!$membership_id || !$day) jsonOut(['ok' => false, 'error' => 'Нет данных'], 400);
-
-        $st = $pdo->prepare("SELECT id FROM marks WHERE workshop_id = ? AND membership_id = ? AND day = ?");
-        $st->execute([$wid, $membership_id, $day]);
-        $row = $st->fetch();
-        if (!$row) jsonOut(['ok' => false, 'error' => 'Заявка не найдена'], 404);
-
-        $pdo->prepare("UPDATE marks SET status = ? WHERE id = ?")->execute([$status, $row['id']]);
-        jsonOut(['ok' => true]);
-    }
-
-    // ---------- Day events: mark as seen ----------
-    if (preg_match('~^/api/workshops/(\d+)/day_events/mark_seen$~', $uri, $m) && $method === 'POST') {
-        $wid = (int)$m[1];
-        $mem = current_membership();
-        if (!$mem || (int)$mem['workshop_id'] !== $wid) jsonOut(['ok' => false, 'error' => 'Нет доступа'], 403);
-
-        $day = trim($input['day'] ?? '');
-        if ($day === '') jsonOut(['ok' => false, 'error' => 'Нет даты'], 400);
-
-        $n = mark_day_events_seen($wid, (int)$mem['id'], $day);
-        jsonOut(['ok' => true, 'marked' => $n]);
-    }
-
-    // ---------- Messages ----------
-    if (preg_match('~^/api/workshops/(\d+)/messages$~', $uri, $m)) {
-        $wid = (int)$m[1];
-
-        if ($method === 'GET') {
-            $day = $_GET['day'] ?? null;
-            if ($day) {
-                $st = $pdo->prepare("
-                    SELECT msg.id, msg.text, msg.created_at,
-                           mm.id AS membership_id, mm.name, mm.role,
-                           a.phone, a.max_username
-                    FROM messages msg
-                    JOIN memberships mm ON mm.id = msg.membership_id
-                    JOIN accounts    a  ON a.id  = mm.account_id
-                    WHERE msg.workshop_id = ? AND msg.day = ?
-                    ORDER BY msg.created_at, msg.id
-                ");
-                $st->execute([$wid, $day]);
-                $items = [];
-                foreach ($st->fetchAll() as $r) {
-                    $items[] = [
-                        'id' => (int)$r['id'], 'text' => $r['text'], 'created_at' => $r['created_at'],
-                        'membership_id' => (int)$r['membership_id'], 'user_name' => $r['name'],
-                        'phone' => $r['phone'] ?? '', 'phone_fmt' => formatPhone($r['phone'] ?? ''),
-                        'max_username' => $r['max_username'] ?? '',
-                        'role' => $r['role'] ?? 'worker',
-                    ];
-                }
-                jsonOut($items);
-            } else {
-                $st = $pdo->prepare("SELECT day, COUNT(*) AS cnt FROM messages WHERE workshop_id = ? GROUP BY day");
-                $st->execute([$wid]);
-                $out = [];
-                foreach ($st->fetchAll() as $r) $out[$r['day']] = (int)$r['cnt'];
-                jsonOut($out);
-            }
-        }
-
-        if ($method === 'POST') {
-            $day = trim($input['day'] ?? '');
-            $text = trim($input['text'] ?? '');
-            if ($day === '' || $text === '') jsonOut(['ok' => false, 'error' => 'Пустое сообщение'], 400);
-            if (mb_strlen($text) > 1000) jsonOut(['ok' => false, 'error' => 'Слишком длинное (макс. 1000)'], 400);
-            if (!preg_match('~^\d{4}-\d{2}-\d{2}$~', $day)) jsonOut(['ok' => false, 'error' => 'Неверный формат даты'], 400);
-
-            $mem = current_membership();
-            if (!$mem || (int)$mem['workshop_id'] !== $wid) jsonOut(['ok' => false, 'error' => 'Сначала войдите в группу'], 401);
-
-            $st = $pdo->prepare("INSERT INTO messages (workshop_id, membership_id, day, text) VALUES (?, ?, ?, ?)");
-            $st->execute([$wid, $mem['id'], $day, $text]);
-            jsonOut(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
-        }
-    }
-
-    jsonOut(['ok' => false, 'error' => 'Not found', 'uri' => $uri, 'method' => $method], 404);
-}
-
-// ============================================================================
-//  МАРШРУТИЗАЦИЯ
-// ============================================================================
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-
-function dispatch_api(string $apiUri, string $method): void {
-    try {
-        init_db();
-        route_api($apiUri, $method);
-    } catch (Throwable $e) {
-        error_log('[calendar] ' . $e->getMessage() . ' @ ' . basename($e->getFile()) . ':' . $e->getLine());
-        http_response_code(500);
-        header('Content-Type: application/json; charset=utf-8');
-        $err = ['ok' => false, 'error' => 'Внутренняя ошибка сервера'];
-        if (APP_DEBUG) {
-            $err['debug'] = $e->getMessage();
-            $err['file']  = basename($e->getFile());
-            $err['line']  = $e->getLine();
-            $err['uri']   = $apiUri;
-        }
-        echo json_encode($err, JSON_UNESCAPED_UNICODE);
-    }
-    exit;
-}
-
-if (isset($_GET['_api'])) {
-    $apiUri = '/api/' . trim((string)$_GET['_api'], '/');
-    dispatch_api($apiUri, $method);
-}
-
-$requestUri = $_SERVER['REQUEST_URI'] ?? '/';
-$uri = parse_url($requestUri, PHP_URL_PATH);
-if (!is_string($uri) || $uri === '') $uri = '/';
-$apiPos = strpos($uri, '/api/');
-if ($apiPos !== false) {
-    dispatch_api(substr($uri, $apiPos), $method);
-}
-
-init_db();
-
-$SELF = basename(__FILE__);
-?>
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#4CAF50">
-<title>Календарь смен</title>
+<title>Календарь цеха</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; min-height: 100%;
@@ -900,6 +16,7 @@ $SELF = basename(__FILE__);
   .calendar { background: #fff; border-radius: 20px; box-shadow: 0 6px 24px rgba(0,0,0,0.15);
     padding: 16px; width: 100%; max-width: 100%; }
 
+  /* ============ Авторизация ============ */
   .auth h3 { margin: 4px 0 12px; font-size: 18px; color: #222; text-align: center; }
   .auth .form-row { display: flex; gap: 8px; margin-bottom: 10px; }
   .auth .form-row input { flex: 1; padding: 14px; font-size: 18px;
@@ -917,12 +34,10 @@ $SELF = basename(__FILE__);
   .auth select { width: 100%; padding: 14px; font-size: 18px; border: 2px solid #ddd;
     border-radius: 12px; outline: none; background: white; margin-bottom: 10px; }
   .auth select:focus { border-color: #4CAF50; }
-  .auth .checkbox-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
-    padding: 10px 12px; background: #f5f5f5; border-radius: 12px; font-size: 15px; color: #333; }
-  .auth .checkbox-row input[type=checkbox] { width: 22px; height: 22px; flex-shrink: 0; }
 
+  /* ============ Панель вошедшего ============ */
   .logged-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px;
-    margin-bottom: 14px; padding: 10px 12px; background: #e8f5e9; border-radius: 12px; flex-wrap: wrap; }
+    margin-bottom: 14px; padding: 10px 12px; background: #e8f5e9; border-radius: 12px; }
   .logged-bar.admin { background: #fff8e1; border: 1px solid #ffe082; }
   .logged-bar .info { display: flex; flex-direction: column; overflow: hidden; min-width: 0; flex: 1; }
   .logged-bar .name { font-size: 16px; color: #1b5e20; font-weight: 700;
@@ -934,25 +49,13 @@ $SELF = basename(__FILE__);
   .logged-bar .my-phone { font-size: 12px; color: #1b5e20; font-weight: 700; margin-top: 2px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .logged-bar.admin .my-phone { color: #8d6e00; }
-  .logged-bar .btns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .logged-bar button { padding: 8px 12px; font-size: 13px; font-weight: 700;
-    border: none; border-radius: 10px; cursor: pointer; flex-shrink: 0; color: white; }
-  .logged-bar button.logout { background: #ff5722; }
-  .logged-bar button.switch { background: #1976d2; }
-  .logged-bar button.role-toggle { background: #7B1FA2; }
-  .logged-bar .max-group-btn {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 8px 12px; font-size: 13px; font-weight: 700;
-    background: #7B1FA2; color: white; border-radius: 10px;
-    text-decoration: none; flex-shrink: 0;
-  }
-  .logged-bar .max-group-btn:active { background: #6a1b9a; }
+  .logged-bar button { padding: 8px 14px; font-size: 14px; font-weight: 700;
+    border: none; border-radius: 10px; background: #ff5722; color: white; cursor: pointer;
+    flex-shrink: 0; }
+  .logged-bar .menu-btn { background: #607d8b; margin-right: 6px; }
+  .logged-bar .btns { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 
-  .group-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-  .group-picker .chip { padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 700;
-    background: #e0e0e0; color: #333; cursor: pointer; border: 2px solid transparent; }
-  .group-picker .chip.active { background: #4CAF50; color: white; border-color: #388e3c; }
-
+  /* ============ Шапка месяца ============ */
   .header { display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 12px; gap: 8px; }
   .header h2 { margin: 0; font-size: 22px; font-weight: 700; text-align: center;
@@ -963,10 +66,10 @@ $SELF = basename(__FILE__);
     line-height: 1; font-weight: 700; flex-shrink: 0; }
   .header button:active { background: #388e3c; }
 
+  /* ============ Календарь ============ */
   .weekdays, .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; }
   .weekdays div { text-align: center; font-weight: 700; color: #666;
     font-size: 14px; padding: 6px 0; user-select: none; }
-
   .days-wrap { padding: 0 12px 12px; margin: 0 -12px; }
 
   .days .day {
@@ -988,17 +91,10 @@ $SELF = basename(__FILE__);
   .days .day.has-pending { background: #fff3cd; color: #856404; }
   .days .day.mine { background: #4CAF50; color: white; }
   .days .day.mine-pending { background: #ffc107; color: #5d4200; }
-
+  .days .day.unseen-flash { animation: unseenFlash 1s ease-in-out infinite; }
   @keyframes unseenFlash {
-    0%   { background: #f5f5f5; box-shadow: 0 0 0 0 rgba(244,67,54,0.0); }
-    25%  { background: #ffcdd2; box-shadow: 0 0 0 8px rgba(244,67,54,0.45); }
-    50%  { background: #f5f5f5; box-shadow: 0 0 0 0 rgba(244,67,54,0.0); }
-    75%  { background: #ffcdd2; box-shadow: 0 0 0 8px rgba(244,67,54,0.45); }
-    100% { background: #f5f5f5; box-shadow: 0 0 0 0 rgba(244,67,54,0.0); }
-  }
-  .days .day.unseen-flash {
-    animation: unseenFlash 1.1s ease-in-out infinite;
-    z-index: 4;
+    0%, 100% { box-shadow: inset 0 0 0 3px #e53935; }
+    50%      { box-shadow: inset 0 0 0 3px rgba(229,57,53,0.15); }
   }
 
   .days .day .num {
@@ -1019,7 +115,6 @@ $SELF = basename(__FILE__);
     pointer-events: none;
     max-width: 100%;
   }
-
   .days .day .people-count {
     display: inline-flex; align-items: center; justify-content: center;
     gap: 2px;
@@ -1033,14 +128,8 @@ $SELF = basename(__FILE__);
     line-height: 1;
     box-shadow: 0 2px 4px rgba(0,0,0,0.22);
   }
-  .days .day .people-count .u {
-    font-size: 10px; font-weight: 700;
-    opacity: 0.85; margin-left: 1px;
-  }
-  .days .day .people-count.zero {
-    background: #e0e0e0; color: #999; box-shadow: none;
-    font-size: 13px;
-  }
+  .days .day .people-count .u { font-size: 10px; font-weight: 700; opacity: 0.85; margin-left: 1px; }
+  .days .day .people-count.zero { background: #e0e0e0; color: #999; box-shadow: none; font-size: 13px; }
   .days .day.mine .people-count { background: #fff; color: #2e7d32; }
   .days .day.has-pending .people-count { background: #856404; }
   .days .day.mine-pending .people-count { background: #5d4200; }
@@ -1072,27 +161,18 @@ $SELF = basename(__FILE__);
     bottom: 6px; left: 0;
   }
   .days .day .names .who {
-    font-size: 12px;
-    line-height: 1.15;
-    font-weight: 700;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding: 1px 6px;
-    border-radius: 6px;
-    background: rgba(255,255,255,0.6);
-    color: #1b5e20;
+    font-size: 12px; line-height: 1.15; font-weight: 700;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 1px 6px; border-radius: 6px;
+    background: rgba(255,255,255,0.6); color: #1b5e20;
   }
   .days .day.mine .names .who { background: rgba(255,255,255,0.28); color: #fff; }
   .days .day.has-users .names .who { background: rgba(255,255,255,0.7); color: #2e7d32; }
   .days .day.mine-pending .names .who { background: rgba(255,255,255,0.55); color: #5d4200; }
   .days .day.has-pending .names .who { background: rgba(255,255,255,0.8); color: #856404; }
-  .days .day .more {
-    font-size: 12px; font-weight: 800; opacity: 0.9;
+  .days .day .more { font-size: 12px; font-weight: 800; opacity: 0.9;
     padding: 1px 8px; border-radius: 6px;
-    background: rgba(255,255,255,0.65); color: #1b5e20;
-  }
+    background: rgba(255,255,255,0.65); color: #1b5e20; }
   .days .day.mine .more { background: rgba(255,255,255,0.3); color: white; }
   .days .day.mine-pending .more { background: rgba(255,255,255,0.4); color: #5d4200; }
   .days .day.has-pending .more { background: rgba(255,255,255,0.8); color: #856404; }
@@ -1106,11 +186,7 @@ $SELF = basename(__FILE__);
     transform: translateX(-50%);
     max-width: 100%;
   }
-  .days .day .dots .dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: #4CAF50;
-    flex-shrink: 0;
-  }
+  .days .day .dots .dot { width: 7px; height: 7px; border-radius: 50%; background: #4CAF50; flex-shrink: 0; }
   .days .day .dots .dot.pending { background: #ff9800; }
   .days .day .dots .dot.rejected { background: #f44336; }
 
@@ -1155,6 +231,7 @@ $SELF = basename(__FILE__);
   .days .day .chat-btn.has-msg { background: #1976d2; color: #fff; box-shadow: 0 2px 4px rgba(25,118,210,0.4); }
   .days .day .chat-btn .badge { font-size: 11px; font-weight: 900; }
 
+  /* ============ Модалка ============ */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6);
     display: none; align-items: center; justify-content: center;
     padding: 8px; z-index: 100; }
@@ -1254,6 +331,36 @@ $SELF = basename(__FILE__);
   .center { text-align: center; }
   .loading { text-align: center; padding: 40px 10px; color: #888; font-size: 15px; }
 
+  .copyable { cursor: pointer; }
+  .copyable:active { opacity: 0.6; }
+
+  .copy-toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #323232; color: #fff; padding: 10px 20px;
+    border-radius: 24px; font-size: 14px; font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s;
+    z-index: 999; max-width: 90vw; text-align: center;
+  }
+  .copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Меню групп */
+  .ws-menu { position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: none; align-items: center; justify-content: center; padding: 12px; z-index: 200; }
+  .ws-menu.open { display: flex; }
+  .ws-menu .box { background: #fff; border-radius: 16px; width: 100%; max-width: 480px;
+    max-height: 85vh; overflow-y: auto; padding: 16px; }
+  .ws-menu h3 { margin: 0 0 12px; font-size: 18px; }
+  .ws-menu .item { display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; margin-bottom: 8px;
+    cursor: pointer; gap: 8px; }
+  .ws-menu .item.cur { background: #e8f5e9; border-color: #a5d6a7; }
+  .ws-menu .item .nm { font-weight: 700; font-size: 15px; }
+  .ws-menu .item .rl { font-size: 12px; color: #666; }
+  .ws-menu .close { width: 100%; padding: 12px; margin-top: 8px; border-radius: 10px;
+    border: none; background: #607d8b; color: #fff; font-weight: 700; cursor: pointer; }
+
   @media (min-width: 560px) {
     .header h2 { font-size: 24px; }
     .header button { width: 56px; height: 56px; min-width: 56px; font-size: 30px; }
@@ -1268,24 +375,22 @@ $SELF = basename(__FILE__);
     .days .day .names { display: flex; bottom: 8px; }
     .days .day .names .who { font-size: 13px; padding: 2px 8px; }
     .days .day .dots { display: none !important; }
-    .days .day .toggle-btn { width: 44px; height: 44px; font-size: 26px;
-      bottom: -12px; left: -12px; border: 3px solid #fff;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.32); }
-    .days .day .chat-btn { min-width: 34px; height: 34px; padding: 0 9px;
-      font-size: 15px; border-radius: 17px; top: 6px; right: 6px; }
+    .days .day .toggle-btn {
+      width: 44px; height: 44px; font-size: 26px;
+      bottom: -12px; left: -12px;
+      border: 3px solid #fff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.32);
+    }
+    .days .day .chat-btn { min-width: 34px; height: 34px; padding: 0 9px; font-size: 15px; border-radius: 17px; top: 6px; right: 6px; }
     .days .day .chat-btn .badge { font-size: 12px; }
   }
-
   @media (max-width: 559px) {
-    body { padding: 5px;
-      padding-top: max(5px, env(safe-area-inset-top));
-      padding-bottom: max(5px, env(safe-area-inset-bottom)); }
+    body { padding: 5px; padding-top: max(5px, env(safe-area-inset-top)); padding-bottom: max(5px, env(safe-area-inset-bottom)); }
     .calendar { padding: 10px; border-radius: 14px; }
     .logged-bar { padding: 8px 10px; margin-bottom: 10px; }
     .logged-bar .name { font-size: 14px; }
     .logged-bar .ws { font-size: 11px; }
-    .logged-bar button, .logged-bar .max-group-btn { padding: 6px 10px; font-size: 12px; }
-
+    .logged-bar button { padding: 6px 10px; font-size: 13px; }
     .weekdays, .days { gap: 9px; }
     .weekdays div { font-size: 12px; padding: 4px 0; }
     .days-wrap { padding: 0 9px 9px; margin: 0 -9px; }
@@ -1298,12 +403,9 @@ $SELF = basename(__FILE__);
     .days .day .dots { display: flex; bottom: 8px; gap: 3px; }
     .days .day .dots .dot { width: 5px; height: 5px; }
     .days .day .names { display: none; }
-    .days .day .toggle-btn { width: 32px; height: 32px; font-size: 20px;
-      bottom: -8px; left: -8px; border: 2px solid #fff; }
-    .days .day .chat-btn { min-width: 28px; height: 28px; padding: 0 6px;
-      font-size: 12px; border-radius: 14px; top: 4px; right: 4px; }
+    .days .day .toggle-btn { width: 32px; height: 32px; font-size: 20px; bottom: -8px; left: -8px; border: 2px solid #fff; }
+    .days .day .chat-btn { min-width: 28px; height: 28px; padding: 0 6px; font-size: 12px; border-radius: 14px; top: 4px; right: 4px; }
     .days .day .chat-btn .badge { font-size: 10px; }
-
     .modal { border-radius: 14px; }
     .modal-header { padding: 12px 50px 8px 14px; }
     .modal-header h3 { font-size: 17px; }
@@ -1317,7 +419,6 @@ $SELF = basename(__FILE__);
     .composer { padding: 8px 10px; }
     .composer textarea { font-size: 15px; padding: 8px 10px; min-height: 40px; }
     .composer button { height: 40px; min-width: 52px; font-size: 15px; padding: 0 14px; }
-
     .auth .form-row input { padding: 12px; font-size: 16px; }
     .auth .btn-primary { padding: 12px; font-size: 16px; }
     .auth .btn-secondary { padding: 11px; font-size: 15px; }
@@ -1330,44 +431,43 @@ $SELF = basename(__FILE__);
 <div class="calendar locked" id="calendar">
   <div id="loadingBlock" class="loading">Загрузка…</div>
 
+  <!-- ===== ШАГ 1: АККАУНТ ===== -->
   <div class="auth hidden" id="accountBlock">
     <div class="center"><span class="step-badge">Шаг 1 — Аккаунт</span></div>
-    <h3>Вход в аккаунт</h3>
+    <h3 id="accountTitle">Вход в аккаунт</h3>
     <div class="form-row"><input type="text" id="accLogin" placeholder="Логин" autocomplete="username"></div>
     <div class="form-row"><input type="password" id="accPass" placeholder="Пароль" autocomplete="current-password"></div>
+    <div class="form-row hidden" id="accPhoneRow"><input type="tel" id="accPhone" placeholder="Телефон (необязательно)" inputmode="tel"></div>
+    <div class="form-row hidden" id="accMaxRow"><input type="text" id="accMax" placeholder="MAX username (необязательно)"></div>
     <button class="btn-primary" id="accLoginBtn">Войти</button>
     <button class="btn-secondary" id="accRegisterBtn">Зарегистрироваться</button>
     <div class="hint" id="accHint"></div>
   </div>
 
+  <!-- ===== ШАГ 2: ЦЕХ ===== -->
   <div class="auth hidden" id="workshopBlock">
-    <div class="center"><span class="step-badge">Шаг 2 — Группа</span></div>
-    <h3>Выбор группы</h3>
+    <div class="center"><span class="step-badge">Шаг 2 — Цех</span></div>
+    <h3>Выбор цеха</h3>
     <div id="workshopListWrap">
       <select id="workshopSelect"></select>
-      <div class="form-row"><input type="password" id="workshopPass" placeholder="Пароль группы" autocomplete="off"></div>
-      <button class="btn-primary" id="workshopEnterBtn">Войти в группу</button>
-      <button class="btn-link" id="showCreateWorkshopBtn">+ Создать новую группу</button>
+      <div class="form-row"><input type="password" id="workshopPass" placeholder="Пароль цеха" autocomplete="off"></div>
+      <div class="form-row"><input type="text" id="membershipName" placeholder="Ваше имя в цехе" autocomplete="off"></div>
+      <button class="btn-primary" id="workshopEnterBtn">Войти в цех</button>
+      <button class="btn-link" id="showCreateWorkshopBtn">+ Создать новый цех</button>
     </div>
     <div id="workshopCreateWrap" class="hidden">
-      <div class="form-row">
-        <input type="text" id="newWorkshopInput" placeholder="Название и пароль через пробел" autocomplete="off">
-      </div>
-      <div class="form-row">
-        <input type="text" id="newWorkshopMax" placeholder="Ссылка на MAX-чат группы (необязательно)" autocomplete="off">
-      </div>
-      <label class="checkbox-row">
-        <input type="checkbox" id="newWorkshopAdmin" checked>
-        Быть админом этой группы
-      </label>
-      <div class="hint" style="margin:0 0 10px;">Только создатель группы может быть админом. Потом можно переключить кнопкой 👑.</div>
-      <button class="btn-primary" id="createWorkshopBtn">Создать группу</button>
+      <div class="form-row"><input type="text" id="newWorkshopName" placeholder="Название цеха" autocomplete="off"></div>
+      <div class="form-row"><input type="password" id="newWorkshopPass" placeholder="Пароль цеха" autocomplete="off"></div>
+      <div class="form-row"><input type="text" id="newWorkshopMaxChat" placeholder="Ссылка на MAX-чат (необязательно)"></div>
+      <div class="form-row"><input type="text" id="newWorkshopMyName" placeholder="Ваше имя в цехе" autocomplete="off"></div>
+      <button class="btn-primary" id="createWorkshopBtn">Создать цех</button>
       <button class="btn-link" id="showJoinWorkshopBtn">← Назад к выбору</button>
     </div>
+    <button class="btn-link" id="backToAccountBtn">← Сменить аккаунт</button>
     <div class="hint" id="workshopHint"></div>
-    <button class="btn-link" id="accLogoutBtn">← Выйти из аккаунта</button>
   </div>
 
+  <!-- ===== ПАНЕЛЬ ВОШЕДШЕГО ===== -->
   <div class="logged-bar hidden" id="loggedBar">
     <div class="info">
       <span class="name" id="loggedName">—</span>
@@ -1375,15 +475,10 @@ $SELF = basename(__FILE__);
       <span class="my-phone hidden" id="loggedPhone"></span>
     </div>
     <div class="btns">
-      <a class="max-group-btn hidden" id="maxGroupBtn" href="#" target="_blank" rel="noopener">MAX-чат</a>
-      <button class="role-toggle" id="toggleAdminBtn" title="Стать/перестать быть админом">👑</button>
-      <button class="switch" id="switchWorkshopBtn">Сменить</button>
-      <button class="logout" id="leaveWorkshopBtn">Выйти из группы</button>
-      <button class="logout" id="logoutBtn">Аккаунт</button>
+      <button class="menu-btn" id="switchWsBtn" title="Мои цеха">🏭</button>
+      <button id="logoutBtn">Выйти</button>
     </div>
   </div>
-
-  <div class="group-picker hidden" id="groupPicker"></div>
 
   <div class="header">
     <button id="prev">‹</button>
@@ -1394,9 +489,10 @@ $SELF = basename(__FILE__);
   <div class="days-wrap">
     <div class="days" id="days"></div>
   </div>
-  <div class="hint-bottom">💬 — сообщения. + / − — заявка на смену.<br>Красное мигание дня = кто-то снялся со смены. Откройте день, чтобы убрать.</div>
+  <div class="hint-bottom">💬 — сообщения. + / − — заявка на смену. 🏭 — мои цеха.</div>
 </div>
 
+<!-- ===== МОДАЛКА ДНЯ ===== -->
 <div class="modal-backdrop" id="modalBackdrop">
   <div class="modal">
     <div class="modal-header">
@@ -1405,7 +501,6 @@ $SELF = basename(__FILE__);
       <button class="close-x" id="modalClose">✕</button>
     </div>
     <div class="modal-body" id="modalBody">
-
       <div class="section-title">💬 Сообщения <span class="cnt" id="cntMessages">0</span></div>
       <div class="messages-list" id="messagesList"></div>
       <div class="messages-empty hidden" id="messagesEmpty">Сообщений пока нет — напишите первое 👇</div>
@@ -1418,7 +513,6 @@ $SELF = basename(__FILE__);
 
       <div class="section-title" id="secRejected" style="display:none;">✗ Отклонены <span class="cnt" id="cntRejected">0</span></div>
       <ul class="users-list" id="listRejected"></ul>
-
     </div>
     <div class="composer">
       <textarea id="msgInput" placeholder="Написать сообщение…" rows="1" maxlength="1000"></textarea>
@@ -1427,9 +521,34 @@ $SELF = basename(__FILE__);
   </div>
 </div>
 
-<script>
-  const SELF_PHP = <?= json_encode($SELF) ?>;
-  const CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;
+<!-- ===== МЕНЮ ЦЕХОВ ===== -->
+<div class="ws-menu" id="wsMenu">
+  <div class="box">
+    <h3>Мои цеха</h3>
+    <div id="wsMenuList"></div>
+    <button class="close" id="wsMenuClose">Закрыть</button>
+  </div>
+</div>
+
+<div class="copy-toast" id="copyToast">Скопировано</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, remove, get, child, push, update, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/13.0.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBiu5vKO9khr9Ftru3lFC8xEj6zKZSj6o4",
+    authDomain: "my-sit-d3ef5.firebaseapp.com",
+    databaseURL: "https://my-sit-d3ef5-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "my-sit-d3ef5",
+    storageBucket: "my-sit-d3ef5.firebasestorage.app",
+    messagingSenderId: "483741682455",
+    appId: "1:483741682455:web:3c6ad2d39e97a687ab4552"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
 
   const $ = id => document.getElementById(id);
   const calendarEl = $('calendar'), monthYear = $('monthYear'), daysEl = $('days');
@@ -1437,26 +556,24 @@ $SELF = basename(__FILE__);
   const loadingBlock = $('loadingBlock');
 
   const accountBlock = $('accountBlock');
-  const accLogin = $('accLogin'), accPass = $('accPass');
-  const accLoginBtn = $('accLoginBtn'), accRegisterBtn = $('accRegisterBtn');
-  const accHint = $('accHint');
+  const accLogin = $('accLogin'), accPass = $('accPass'), accPhone = $('accPhone'), accMax = $('accMax');
+  const accPhoneRow = $('accPhoneRow'), accMaxRow = $('accMaxRow');
+  const accLoginBtn = $('accLoginBtn'), accRegisterBtn = $('accRegisterBtn'), accHint = $('accHint');
+  const accountTitle = $('accountTitle');
 
   const workshopBlock = $('workshopBlock'), workshopSelect = $('workshopSelect');
   const workshopPass = $('workshopPass'), workshopEnterBtn = $('workshopEnterBtn');
   const workshopHint = $('workshopHint');
   const workshopListWrap = $('workshopListWrap'), workshopCreateWrap = $('workshopCreateWrap');
-  const newWorkshopInput = $('newWorkshopInput'), newWorkshopMax = $('newWorkshopMax');
-  const newWorkshopAdmin = $('newWorkshopAdmin');
+  const newWorkshopName = $('newWorkshopName'), newWorkshopPass = $('newWorkshopPass');
+  const newWorkshopMaxChat = $('newWorkshopMaxChat'), newWorkshopMyName = $('newWorkshopMyName');
+  const membershipName = $('membershipName');
   const createWorkshopBtn = $('createWorkshopBtn');
   const showCreateWorkshopBtn = $('showCreateWorkshopBtn'), showJoinWorkshopBtn = $('showJoinWorkshopBtn');
-  const accLogoutBtn = $('accLogoutBtn');
+  const backToAccountBtn = $('backToAccountBtn');
 
   const loggedBar = $('loggedBar'), loggedName = $('loggedName'), loggedWorkshop = $('loggedWorkshop');
-  const loggedPhone = $('loggedPhone');
-  const logoutBtn = $('logoutBtn'), leaveWorkshopBtn = $('leaveWorkshopBtn');
-  const switchWorkshopBtn = $('switchWorkshopBtn'), toggleAdminBtn = $('toggleAdminBtn');
-  const maxGroupBtn = $('maxGroupBtn');
-  const groupPicker = $('groupPicker');
+  const loggedPhone = $('loggedPhone'), logoutBtn = $('logoutBtn'), switchWsBtn = $('switchWsBtn');
 
   const modalBackdrop = $('modalBackdrop'), modalTitle = $('modalTitle'), modalDate = $('modalDate');
   const modalBody = $('modalBody'), modalClose = $('modalClose');
@@ -1467,240 +584,311 @@ $SELF = basename(__FILE__);
   const cntMessages = $('cntMessages');
   const msgInput = $('msgInput'), msgSend = $('msgSend');
 
+  const wsMenu = $('wsMenu'), wsMenuList = $('wsMenuList'), wsMenuClose = $('wsMenuClose');
+
   const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   const today = new Date();
   let currentYear = today.getFullYear(), currentMonth = today.getMonth();
 
-  let currentAccount = null;
-  let currentWorkshop = null;
-  let currentMembership = null;
-  let myWorkshops = [];
-  let csrfToken = CSRF_TOKEN;
-
-  let allMarks = {};
-  let unseenByDay = {};
-  let msgCounts = {};
+  // Глобальное состояние
+  let currentAccount = null;   // {key, login, phone, maxUsername}
+  let currentWorkshop = null;  // {key, name, createdBy, maxChat}
+  let currentMembership = null;// {name, role}
+  let myWorkshops = [];        // [{key, name, role, myName}]
+  let allMarks = {}, msgCounts = {}, unseenByDay = {};
   let openDayKey = null;
+  let unsubMarks = null, unsubMsgCounts = null, unsubEvents = null, unsubModalMsgs = null;
 
-  const isAdmin = () => currentMembership && currentMembership.role === 'admin';
-  const isCreator = () => currentAccount && currentWorkshop
-    && Number(currentWorkshop.created_by) === Number(currentAccount.id);
+  const isAdmin = () => {
+    if (!currentWorkshop || !currentAccount) return false;
+    return currentWorkshop.createdBy === currentAccount.key || (currentMembership && currentMembership.role === 'admin');
+  };
+  const isCreator = () => currentWorkshop && currentAccount && currentWorkshop.createdBy === currentAccount.key;
 
-  async function api(path, opts={}) {
-    const m = path.match(/^\/?api\/([^?]*)(\?.*)?$/);
-    const cleanPath  = m ? m[1] : path.replace(/^\/?/, '');
-    const cleanQuery = (m && m[2]) ? m[2].slice(1) : '';
-    let url = SELF_PHP + '?_api=' + encodeURIComponent(cleanPath);
-    if (cleanQuery) url += '&' + cleanQuery;
-    const method = (opts.method || 'GET').toUpperCase();
-    const headers = {};
-    if (opts.body) headers['Content-Type'] = 'application/json';
-    if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken;
-    const res = await fetch(url, {
-      credentials: 'same-origin',
-      headers,
-      ...opts,
-      body: opts.body ? JSON.stringify(opts.body) : undefined
-    });
-    let data = null;
-    try { data = await res.json(); } catch (e) { data = { ok: false, error: 'Bad JSON' }; }
-    if (data && data.csrf) csrfToken = data.csrf;
-    return data;
+  const safeKey = s => encodeURIComponent((s || '').trim().toLowerCase());
+  const dayKey = (y, m, d) => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  const initials = n => (n || '?').trim().slice(0,1).toUpperCase();
+  const setHint = (el, msg, isErr=false) => { el.textContent = msg; el.classList.toggle('error', isErr); };
+  const digitsOnly = s => (s || '').replace(/\D/g, '');
+  const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const formatTime = ts => { if (!ts) return ''; const d = new Date(ts); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); };
+
+  async function sha256(text) {
+    const data = new TextEncoder().encode(text);
+    const buf = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  function dayKey(y, m, d) { return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
-  function initials(name) { return (name || '?').trim().slice(0,1).toUpperCase(); }
-  function setHint(el, msg, isErr=false) { el.textContent = msg; el.classList.toggle('error', isErr); }
-  function formatTime(iso) { if (!iso) return ''; const m = iso.match(/(\d{2}):(\d{2})/); return m ? `${m[1]}:${m[2]}` : ''; }
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function normalizePhone(raw) {
+    if (!raw) return '';
+    let d = digitsOnly(raw);
+    if (d.length === 11 && d[0] === '8') d = '7' + d.slice(1);
+    return d;
+  }
+  function formatPhone(d) {
+    if (!d) return '';
+    if (d.length === 11 && d[0] === '7') return '+7 ' + d.slice(1,4) + ' ' + d.slice(4,7) + '-' + d.slice(7,9) + '-' + d.slice(9,11);
+    if (d.length === 10) return '+7 ' + d.slice(0,3) + ' ' + d.slice(3,6) + '-' + d.slice(6,8) + '-' + d.slice(8,10);
+    return '+' + d;
+  }
+  function cleanMax(raw) {
+    raw = (raw || '').trim();
+    if (!raw) return '';
+    const m = raw.match(/max\.ru\/(?:u\/|join\/)?([^/?\s]+)/);
+    if (m) return m[1];
+    return raw.replace(/[^A-Za-z0-9_.]/g, '');
+  }
+  function maxUrl(path) {
+    if (!path) return '';
+    if (/^https?:\/\//i.test(path)) return path;
+    return 'https://max.ru/' + path;
   }
 
-  function hideAllAuth() {
+  // ===== Копирование =====
+  let copyToastTimer = null;
+  function showCopyToast(text) {
+    const t = $('copyToast');
+    t.textContent = text || 'Скопировано';
+    t.classList.add('show');
+    if (copyToastTimer) clearTimeout(copyToastTimer);
+    copyToastTimer = setTimeout(() => t.classList.remove('show'), 1400);
+  }
+  async function copyPhone(rawDigits) {
+    if (!rawDigits) return;
+    const pretty = formatPhone(rawDigits);
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(pretty);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = pretty; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showCopyToast('📱 ' + pretty + ' скопирован');
+    } catch (e) { showCopyToast('Не удалось скопировать'); }
+  }
+
+  // ===== Экраны =====
+  function lockCalendar(locked) { calendarEl.classList.toggle('locked', locked); }
+  function showLoading() {
+    loadingBlock.classList.remove('hidden');
     accountBlock.classList.add('hidden');
     workshopBlock.classList.add('hidden');
     loggedBar.classList.add('hidden');
-  }
-
-  function showLoading() {
-    loadingBlock.classList.remove('hidden');
-    hideAllAuth();
-    calendarEl.classList.add('locked');
+    lockCalendar(true);
   }
   function showAccountStep() {
     loadingBlock.classList.add('hidden');
-    hideAllAuth();
     accountBlock.classList.remove('hidden');
-    accLogin.value = ''; accPass.value = '';
+    workshopBlock.classList.add('hidden');
+    loggedBar.classList.add('hidden');
+    lockCalendar(true);
+    accountTitle.textContent = 'Вход в аккаунт';
+    accLoginBtn.classList.remove('hidden');
+    accRegisterBtn.classList.remove('hidden');
+    accPhoneRow.classList.add('hidden');
+    accMaxRow.classList.add('hidden');
+    accPass.value = '';
     setHint(accHint, '');
-    calendarEl.classList.add('locked');
   }
   function showWorkshopStep() {
     loadingBlock.classList.add('hidden');
-    hideAllAuth();
+    accountBlock.classList.add('hidden');
     workshopBlock.classList.remove('hidden');
-    calendarEl.classList.add('locked');
+    loggedBar.classList.add('hidden');
+    lockCalendar(true);
     loadWorkshops();
+    setHint(workshopHint, '');
   }
   function showLoggedIn() {
     loadingBlock.classList.add('hidden');
-    hideAllAuth();
+    accountBlock.classList.add('hidden');
+    workshopBlock.classList.add('hidden');
     loggedBar.classList.remove('hidden');
-    calendarEl.classList.remove('locked');
-
+    lockCalendar(false);
     const admin = isAdmin();
     loggedBar.classList.toggle('admin', admin);
-    loggedName.textContent = (admin ? '👑 ' : '') + (currentMembership.name || currentAccount.login);
-    loggedWorkshop.textContent = (admin ? 'Админ · ' : 'Участник · ') + currentWorkshop.name + ' · логин: ' + currentAccount.login;
-    if (currentAccount.phone_fmt) {
+    loggedName.textContent = (admin ? '👑 ' : '') + currentMembership.name;
+    loggedWorkshop.textContent = (isCreator() ? 'Создатель' : admin ? 'Админ' : 'Рабочий') + ' · ' + currentWorkshop.name;
+    if (currentAccount.phone) {
       loggedPhone.classList.remove('hidden');
-      loggedPhone.textContent = '📱 ' + currentAccount.phone_fmt;
+      loggedPhone.textContent = '📱 ' + formatPhone(currentAccount.phone);
+      loggedPhone.classList.add('copyable');
+      loggedPhone.onclick = () => copyPhone(currentAccount.phone);
     } else {
       loggedPhone.classList.add('hidden');
+      loggedPhone.onclick = null;
     }
-
-    toggleAdminBtn.style.display = isCreator() ? '' : 'none';
-
-    const mcUrl = currentWorkshop.max_chat_url || '';
-    if (mcUrl) {
-      maxGroupBtn.classList.remove('hidden');
-      maxGroupBtn.href = mcUrl;
-    } else {
-      maxGroupBtn.classList.add('hidden');
-      maxGroupBtn.removeAttribute('href');
-    }
-
-    renderGroupPicker();
-    loadMarks();
-    loadMessageCounts();
+    subscribeMarks();
+    subscribeMsgCounts();
+    subscribeEvents();
   }
 
-  function renderGroupPicker() {
-    if (!myWorkshops || myWorkshops.length === 0) {
-      groupPicker.classList.add('hidden');
-      groupPicker.innerHTML = '';
-      return;
-    }
-    groupPicker.classList.remove('hidden');
-    groupPicker.innerHTML = '';
-    myWorkshops.forEach(w => {
-      const chip = document.createElement('div');
-      chip.className = 'chip' + (currentWorkshop && w.workshop_id === currentWorkshop.id ? ' active' : '');
-      chip.textContent = (w.role === 'admin' ? '👑 ' : '') + w.workshop_name;
-      chip.addEventListener('click', async () => {
-        if (currentWorkshop && w.workshop_id === currentWorkshop.id) return;
-        const r = await api('/api/session/switch_workshop', { method: 'POST', body: { workshop_id: w.workshop_id } });
-        if (!r.ok) { alert(r.error || 'Ошибка'); return; }
-        await restoreSession();
-      });
-      groupPicker.appendChild(chip);
-    });
+  // ===== СЕССИЯ =====
+  function saveSession() {
+    localStorage.setItem('cal_acc_key', currentAccount.key);
+    localStorage.setItem('cal_acc_json', JSON.stringify(currentAccount));
+    localStorage.setItem('cal_ws_key', currentWorkshop.key);
+    localStorage.setItem('cal_ws_json', JSON.stringify(currentWorkshop));
+    localStorage.setItem('cal_mem_json', JSON.stringify(currentMembership));
   }
-
+  function clearSession() {
+    ['cal_acc_key','cal_acc_json','cal_ws_key','cal_ws_json','cal_mem_json']
+      .forEach(k => localStorage.removeItem(k));
+  }
   async function restoreSession() {
-    showLoading();
+    const accJson = localStorage.getItem('cal_acc_json');
+    const wsJson = localStorage.getItem('cal_ws_json');
+    const memJson = localStorage.getItem('cal_mem_json');
+    if (!accJson) { showAccountStep(); return; }
     try {
-      const data = await api('/api/session');
-      if (data.csrf) csrfToken = data.csrf;
-      if (data.account) {
-        currentAccount = data.account;
-        myWorkshops = data.my_workshops || [];
-        if (data.workshop && data.membership) {
-          currentWorkshop = data.workshop;
-          currentMembership = data.membership;
-          showLoggedIn();
-          return;
+      currentAccount = JSON.parse(accJson);
+      // подтягиваем актуальные данные
+      const accSnap = await get(child(ref(db), `accounts/${currentAccount.key}`));
+      if (!accSnap.exists()) { clearSession(); showAccountStep(); return; }
+      const a = accSnap.val();
+      currentAccount = { key: currentAccount.key, login: a.login, phone: a.phone || '', maxUsername: a.maxUsername || '' };
+      if (wsJson && memJson) {
+        currentWorkshop = JSON.parse(wsJson);
+        currentMembership = JSON.parse(memJson);
+        // проверим membership
+        const mSnap = await get(child(ref(db), `memberships/${currentWorkshop.key}/${currentAccount.key}`));
+        if (mSnap.exists()) {
+          currentMembership = mSnap.val();
+          const wSnap = await get(child(ref(db), `workshops/${currentWorkshop.key}`));
+          if (wSnap.exists()) {
+            const w = wSnap.val();
+            currentWorkshop = { key: currentWorkshop.key, name: w.name, createdBy: w.createdBy, maxChat: w.maxChat || '' };
+            saveSession();
+            showLoggedIn();
+            return;
+          }
         }
-        currentWorkshop = null; currentMembership = null;
-        showWorkshopStep();
-        return;
       }
-      currentAccount = null; currentWorkshop = null; currentMembership = null; myWorkshops = [];
-      showAccountStep();
+      showWorkshopStep();
     } catch (e) { console.error(e); showAccountStep(); }
   }
 
-  async function loadWorkshops() {
-    try {
-      const list = await api('/api/workshops');
-      workshopSelect.innerHTML = '';
-      if (!Array.isArray(list) || list.length === 0) {
-        const o = document.createElement('option');
-        o.value = ''; o.textContent = '— нет групп, создайте первую —';
-        workshopSelect.appendChild(o); workshopEnterBtn.disabled = true;
-      } else {
-        workshopEnterBtn.disabled = false;
-        list.forEach(w => {
-          const o = document.createElement('option');
-          o.value = w.id; o.textContent = w.name;
-          workshopSelect.appendChild(o);
-        });
-      }
-    } catch (e) { console.error(e); }
-  }
-
+  // ===== АККАУНТ =====
   async function registerAccount() {
-    const login = accLogin.value.trim(), password = accPass.value;
-    if (!login || password.length < 3) {
-      setHint(accHint, 'Логин и пароль минимум 3 символа', true); return;
-    }
-    const data = await api('/api/accounts/register', { method: 'POST', body: { login, password } });
-    if (!data.ok) { setHint(accHint, data.error || 'Ошибка', true); return; }
-    currentAccount = data.account;
-    myWorkshops = [];
-    showWorkshopStep();
+    const login = accLogin.value.trim();
+    const password = accPass.value;
+    if (!login || password.length < 3) { setHint(accHint, 'Логин и пароль минимум 3 символа', true); return; }
+    const loginKey = safeKey(login);
+    try {
+      const snap = await get(child(ref(db), `accountLogins/${loginKey}`));
+      if (snap.exists()) { setHint(accHint, 'Такой логин уже занят', true); return; }
+      const phone = normalizePhone(accPhone.value);
+      const maxU = cleanMax(accMax.value);
+      const accKey = loginKey;
+      await set(ref(db, `accounts/${accKey}`), {
+        login, passHash: await sha256(password), phone, maxUsername: maxU, createdAt: Date.now()
+      });
+      await set(ref(db, `accountLogins/${loginKey}`), accKey);
+      currentAccount = { key: accKey, login, phone, maxUsername: maxU };
+      saveSession();
+      showWorkshopStep();
+    } catch (e) { setHint(accHint, 'Ошибка сети', true); console.error(e); }
   }
 
   async function loginAccount() {
-    const login = accLogin.value.trim(), password = accPass.value;
+    const login = accLogin.value.trim();
+    const password = accPass.value;
     if (!login || !password) { setHint(accHint, 'Введите логин и пароль', true); return; }
-    const data = await api('/api/accounts/login', { method: 'POST', body: { login, password } });
-    if (!data.ok) { setHint(accHint, data.error || 'Ошибка', true); return; }
-    currentAccount = data.account;
-    await restoreSession();
+    const loginKey = safeKey(login);
+    try {
+      const accKeySnap = await get(child(ref(db), `accountLogins/${loginKey}`));
+      if (!accKeySnap.exists()) { setHint(accHint, 'Неверный логин или пароль', true); return; }
+      const accKey = accKeySnap.val();
+      const accSnap = await get(child(ref(db), `accounts/${accKey}`));
+      if (!accSnap.exists()) { setHint(accHint, 'Неверный логин или пароль', true); return; }
+      const a = accSnap.val();
+      if (a.passHash !== await sha256(password)) { setHint(accHint, 'Неверный логин или пароль', true); return; }
+      currentAccount = { key: accKey, login: a.login, phone: a.phone || '', maxUsername: a.maxUsername || '' };
+      saveSession();
+      showWorkshopStep();
+    } catch (e) { setHint(accHint, 'Ошибка сети', true); console.error(e); }
   }
 
-  async function logoutAccount() {
-    await api('/api/session/logout', { method: 'POST' });
-    currentAccount = null; currentWorkshop = null; currentMembership = null; myWorkshops = [];
-    allMarks = {}; msgCounts = {}; unseenByDay = {};
-    showAccountStep();
-  }
-
-  async function leaveWorkshop() {
-    await api('/api/session/leave_workshop', { method: 'POST' });
-    currentWorkshop = null; currentMembership = null;
-    allMarks = {}; msgCounts = {}; unseenByDay = {};
-    await restoreSession();
+  // ===== ЦЕХА =====
+  async function loadWorkshops() {
+    try {
+      const snap = await get(child(ref(db), 'workshops'));
+      workshopSelect.innerHTML = '';
+      if (!snap.exists()) {
+        const o = document.createElement('option');
+        o.value = ''; o.textContent = '— нет цехов, создайте первый —';
+        workshopSelect.appendChild(o); workshopEnterBtn.disabled = true;
+        return;
+      }
+      workshopEnterBtn.disabled = false;
+      const data = snap.val();
+      Object.keys(data).forEach(key => {
+        const o = document.createElement('option');
+        o.value = key;
+        o.textContent = data[key].name || key;
+        workshopSelect.appendChild(o);
+      });
+    } catch (e) { console.error(e); }
   }
 
   async function enterWorkshop() {
-    const id = workshopSelect.value, password = workshopPass.value;
-    if (!id) { setHint(workshopHint, 'Выберите группу', true); return; }
-    if (!password) { setHint(workshopHint, 'Введите пароль группы', true); return; }
-    const name = workshopSelect.options[workshopSelect.selectedIndex].textContent;
+    const key = workshopSelect.value;
+    const password = workshopPass.value;
+    const myName = membershipName.value.trim();
+    if (!key) { setHint(workshopHint, 'Выберите цех', true); return; }
+    if (!password) { setHint(workshopHint, 'Введите пароль цеха', true); return; }
+    if (!myName || myName.length < 2) { setHint(workshopHint, 'Введите имя в цехе (мин. 2 символа)', true); return; }
+    try {
+      const wSnap = await get(child(ref(db), `workshops/${key}`));
+      if (!wSnap.exists()) { setHint(workshopHint, 'Цех не найден', true); return; }
+      const w = wSnap.val();
+      if (w.passHash !== await sha256(password)) { setHint(workshopHint, 'Неверный пароль цеха', true); return; }
+      // Проверим уникальность имени в цехе
+      const membersSnap = await get(child(ref(db), `memberships/${key}`));
+      const members = membersSnap.exists() ? membersSnap.val() : {};
+      const nameTaken = Object.entries(members).some(([accKey, m]) =>
+        m.name.trim().toLowerCase() === myName.toLowerCase() && accKey !== currentAccount.key);
+      if (nameTaken) { setHint(workshopHint, 'Такое имя уже занято в этом цехе', true); return; }
 
-    const data = await api('/api/workshops/login', { method: 'POST', body: { name, password } });
-    if (!data.ok) { setHint(workshopHint, data.error || 'Ошибка', true); return; }
-    workshopPass.value = '';
-    await restoreSession();
+      const existing = members[currentAccount.key];
+      const role = existing ? (existing.role || 'worker') : 'worker';
+      const mem = { name: myName, role, joinedAt: existing ? existing.joinedAt : Date.now() };
+      await set(ref(db, `memberships/${key}/${currentAccount.key}`), mem);
+      currentWorkshop = { key, name: w.name, createdBy: w.createdBy, maxChat: w.maxChat || '' };
+      currentMembership = mem;
+      workshopPass.value = '';
+      saveSession();
+      showLoggedIn();
+    } catch (e) { setHint(workshopHint, 'Ошибка сети', true); console.error(e); }
   }
 
   async function createWorkshop() {
-    const raw = newWorkshopInput.value.trim();
-    const m = raw.match(/^(\S+)\s+(.+)$/);
-    if (!m) { setHint(workshopHint, 'Введите название и пароль через пробел', true); return; }
-    const name = m[1];
-    const password = m[2].trim();
-    if (password.length < 3) { setHint(workshopHint, 'Пароль минимум 3 символа', true); return; }
-    const as_admin = newWorkshopAdmin.checked;
-    const max_chat = newWorkshopMax.value.trim();
-
-    const data = await api('/api/workshops', { method: 'POST', body: { name, password, as_admin, max_chat } });
-    if (!data.ok) { setHint(workshopHint, data.error || 'Ошибка', true); return; }
-    newWorkshopInput.value = '';
-    newWorkshopMax.value = '';
-    await restoreSession();
+    const name = newWorkshopName.value.trim();
+    const password = newWorkshopPass.value;
+    const maxChat = cleanMax(newWorkshopMaxChat.value);
+    const myName = newWorkshopMyName.value.trim();
+    if (!name || password.length < 3) { setHint(workshopHint, 'Название и пароль мин. 3 символа', true); return; }
+    if (!myName || myName.length < 2) { setHint(workshopHint, 'Введите ваше имя в цехе', true); return; }
+    const key = safeKey(name);
+    try {
+      const snap = await get(child(ref(db), `workshops/${key}`));
+      if (snap.exists()) { setHint(workshopHint, 'Цех с таким названием уже есть', true); return; }
+      await set(ref(db, `workshops/${key}`), {
+        name, passHash: await sha256(password),
+        maxChat: maxChat || '', createdBy: currentAccount.key, createdAt: Date.now()
+      });
+      const mem = { name: myName, role: 'admin', joinedAt: Date.now() };
+      await set(ref(db, `memberships/${key}/${currentAccount.key}`), mem);
+      currentWorkshop = { key, name, createdBy: currentAccount.key, maxChat: maxChat || '' };
+      currentMembership = mem;
+      newWorkshopName.value = ''; newWorkshopPass.value = '';
+      newWorkshopMaxChat.value = ''; newWorkshopMyName.value = '';
+      saveSession();
+      showLoggedIn();
+      setTimeout(() => alert('👑 Вы создали цех и стали его администратором.'), 200);
+    } catch (e) { setHint(workshopHint, 'Ошибка сети', true); console.error(e); }
   }
 
   function showCreateWorkshopForm() {
@@ -1711,52 +899,157 @@ $SELF = basename(__FILE__);
     workshopCreateWrap.classList.add('hidden'); workshopListWrap.classList.remove('hidden');
     setHint(workshopHint, ''); loadWorkshops();
   }
-
-  async function toggleAdmin() {
-    if (!currentMembership) return;
-    const data = await api('/api/memberships/toggle_admin', { method: 'POST' });
-    if (!data.ok) { alert(data.error || 'Ошибка'); return; }
-    await restoreSession();
+  function backToAccount() {
+    unsubscribeAll();
+    currentAccount = null; currentWorkshop = null; currentMembership = null;
+    allMarks = {}; msgCounts = {}; unseenByDay = {};
+    clearSession();
+    showAccountStep();
+  }
+  function logoutAll() {
+    unsubscribeAll();
+    currentAccount = null; currentWorkshop = null; currentMembership = null;
+    allMarks = {}; msgCounts = {}; unseenByDay = {};
+    clearSession();
+    showAccountStep();
   }
 
-  async function loadMarks() {
-    if (!currentWorkshop) return;
+  // ===== МЕНЮ ЦЕХОВ =====
+  async function openWsMenu() {
+    wsMenuList.innerHTML = '<div style="padding:8px;color:#888;">Загрузка…</div>';
+    wsMenu.classList.add('open');
     try {
-      const data = await api(`/api/workshops/${currentWorkshop.id}/marks`);
-      if (data && data.marks) {
-        allMarks = data.marks;
-        unseenByDay = data.unseen || {};
-      } else {
-        allMarks = data || {};
-        unseenByDay = {};
-      }
+      const snap = await get(child(ref(db), `memberships`));
+      const all = snap.exists() ? snap.val() : {};
+      const mine = [];
+      Object.keys(all).forEach(wsKey => {
+        if (all[wsKey] && all[wsKey][currentAccount.key]) {
+          mine.push({ key: wsKey, ...all[wsKey][currentAccount.key] });
+        }
+      });
+      // подтянем имена цехов
+      const wsSnap = await get(child(ref(db), 'workshops'));
+      const wsData = wsSnap.exists() ? wsSnap.val() : {};
+      myWorkshops = mine.map(m => ({
+        key: m.key,
+        name: (wsData[m.key] && wsData[m.key].name) || m.key,
+        role: m.role || 'worker',
+        myName: m.name,
+        createdBy: wsData[m.key] ? wsData[m.key].createdBy : null,
+        maxChat: wsData[m.key] ? (wsData[m.key].maxChat || '') : ''
+      }));
+      renderWsMenu();
+    } catch (e) { wsMenuList.innerHTML = '<div style="color:#d32f2f;">Ошибка загрузки</div>'; }
+  }
+  function renderWsMenu() {
+    wsMenuList.innerHTML = '';
+    if (myWorkshops.length === 0) {
+      wsMenuList.innerHTML = '<div style="padding:8px;color:#888;">Нет цехов</div>'; return;
+    }
+    myWorkshops.forEach(w => {
+      const el = document.createElement('div');
+      el.className = 'item' + (currentWorkshop && w.key === currentWorkshop.key ? ' cur' : '');
+      const left = document.createElement('div');
+      const nm = document.createElement('div'); nm.className = 'nm';
+      nm.textContent = (w.createdBy === currentAccount.key ? '👑 ' : '') + w.name;
+      const rl = document.createElement('div'); rl.className = 'rl';
+      rl.textContent = w.myName + ' · ' + (w.createdBy === currentAccount.key ? 'создатель' : w.role === 'admin' ? 'админ' : 'рабочий');
+      left.appendChild(nm); left.appendChild(rl);
+      el.appendChild(left);
+      el.addEventListener('click', () => switchWorkshop(w));
+      wsMenuList.appendChild(el);
+    });
+  }
+  async function switchWorkshop(w) {
+    if (currentWorkshop && w.key === currentWorkshop.key) { wsMenu.classList.remove('open'); return; }
+    unsubscribeAll();
+    currentWorkshop = { key: w.key, name: w.name, createdBy: w.createdBy, maxChat: w.maxChat };
+    currentMembership = { name: w.myName, role: w.role, joinedAt: Date.now() };
+    saveSession();
+    wsMenu.classList.remove('open');
+    showLoggedIn();
+  }
+
+  function unsubscribeAll() {
+    if (unsubMarks) { unsubMarks(); unsubMarks = null; }
+    if (unsubMsgCounts) { unsubMsgCounts(); unsubMsgCounts = null; }
+    if (unsubEvents) { unsubEvents(); unsubEvents = null; }
+    if (unsubModalMsgs) { unsubModalMsgs(); unsubModalMsgs = null; }
+  }
+
+  // ===== ПОДПИСКИ =====
+  function subscribeMarks() {
+    if (unsubMarks) unsubMarks();
+    unsubMarks = onValue(ref(db, `marks/${currentWorkshop.key}`), snap => {
+      allMarks = snap.val() || {};
       renderCalendar();
-    } catch (e) { console.error(e); }
+    });
   }
-  async function loadMessageCounts() {
-    if (!currentWorkshop) return;
-    try { msgCounts = await api(`/api/workshops/${currentWorkshop.id}/messages`); renderCalendar(); }
-    catch (e) { console.error(e); }
+  function subscribeMsgCounts() {
+    if (unsubMsgCounts) unsubMsgCounts();
+    unsubMsgCounts = onValue(ref(db, `messages/${currentWorkshop.key}`), snap => {
+      const data = snap.val() || {};
+      msgCounts = {};
+      Object.keys(data).forEach(day => { msgCounts[day] = Object.keys(data[day] || {}).length; });
+      renderCalendar();
+    });
+  }
+  // Мигание: считаем события, которые я не видел
+  function subscribeEvents() {
+    if (unsubEvents) unsubEvents();
+    unsubEvents = onValue(ref(db, `dayEvents/${currentWorkshop.key}`), async snap => {
+      const data = snap.val() || {};
+      const seenSnap = await get(child(ref(db), `dayEventsSeen/${currentWorkshop.key}`));
+      const seen = seenSnap.exists() ? seenSnap.val() : {};
+      const unseen = {};
+      Object.keys(data).forEach(day => {
+        Object.keys(data[day] || {}).forEach(evId => {
+          const ev = data[day][evId];
+          if (ev.actorKey === currentAccount.key) return; // свои не мигают
+          const seenForEv = (seen[day] && seen[day][evId]) || {};
+          if (!seenForEv[currentAccount.key]) unseen[day] = (unseen[day] || 0) + 1;
+        });
+      });
+      unseenByDay = unseen;
+      renderCalendar();
+    });
   }
 
+  // ===== ОТМЕТКИ =====
   async function toggleDay(key) {
-    if (!currentMembership || !currentWorkshop) return;
-    await api(`/api/workshops/${currentWorkshop.id}/marks/toggle`, {
-      method: 'POST', body: { day: key }
-    });
-    await loadMarks();
+    if (!currentAccount || !currentWorkshop) return;
+    const markRef = ref(db, `marks/${currentWorkshop.key}/${key}/${currentAccount.key}`);
+    const snap = await get(markRef);
+    if (snap.exists()) {
+      // снимаем — создаём событие removed + сразу помечаем seen для себя
+      const evRef = push(ref(db, `dayEvents/${currentWorkshop.key}/${key}`));
+      await update(evRef, {
+        kind: 'removed',
+        actorKey: currentAccount.key,
+        actorName: currentMembership.name,
+        createdAt: Date.now()
+      });
+      await set(ref(db, `dayEventsSeen/${currentWorkshop.key}/${key}/${evRef.key}/${currentAccount.key}`), true);
+      await remove(markRef);
+    } else {
+      const status = isAdmin() ? 'approved' : 'pending';
+      await set(markRef, {
+        name: currentMembership.name,
+        phone: currentAccount.phone || '',
+        maxUsername: currentAccount.maxUsername || '',
+        role: isCreator() ? 'admin' : (currentMembership.role || 'worker'),
+        status,
+        updatedAt: Date.now()
+      });
+    }
   }
 
-  async function setStatus(membershipId, day, status) {
+  async function setStatus(userKey, day, status) {
     if (!isAdmin()) return;
-    const data = await api(`/api/workshops/${currentWorkshop.id}/marks/set_status`, {
-      method: 'POST', body: { membership_id: membershipId, day, status }
-    });
-    if (!data.ok) { alert(data.error || 'Ошибка'); return; }
-    await loadMarks();
-    if (openDayKey) await renderModalLists();
+    await update(ref(db, `marks/${currentWorkshop.key}/${day}/${userKey}`), { status });
   }
 
+  // ===== КАЛЕНДАРЬ =====
   function renderCalendar() {
     daysEl.innerHTML = '';
     monthYear.textContent = `${monthNames[currentMonth]} ${currentYear}`;
@@ -1773,12 +1066,10 @@ $SELF = basename(__FILE__);
       const key = dayKey(currentYear, currentMonth, d);
       const users = allMarks[key] || {};
       const entries = Object.entries(users);
-
       const approved = entries.filter(([, u]) => u.status === 'approved');
       const pending  = entries.filter(([, u]) => u.status === 'pending');
       const rejected = entries.filter(([, u]) => u.status === 'rejected');
-
-      const myEntry = currentMembership ? users[String(currentMembership.id)] : null;
+      const myEntry = currentAccount ? users[currentAccount.key] : null;
       const myStatus = myEntry ? myEntry.status : null;
 
       const dayEl = document.createElement('div');
@@ -1787,21 +1078,14 @@ $SELF = basename(__FILE__);
         dayEl.classList.add('today');
 
       if (approved.length > 0) {
-        if (myStatus === 'approved') dayEl.classList.add('mine');
-        else dayEl.classList.add('has-users');
+        dayEl.classList.add(myStatus === 'approved' ? 'mine' : 'has-users');
       } else if (pending.length > 0) {
-        if (myStatus === 'pending') dayEl.classList.add('mine-pending');
-        else dayEl.classList.add('has-pending');
+        dayEl.classList.add(myStatus === 'pending' ? 'mine-pending' : 'has-pending');
       } else if (rejected.length > 0) {
-        if (myStatus === 'rejected') dayEl.classList.add('mine-pending');
-        else dayEl.classList.add('has-pending');
+        dayEl.classList.add(myStatus === 'rejected' ? 'mine-pending' : 'has-pending');
       }
 
-      if (unseenByDay[key] && unseenByDay[key] > 0) {
-        dayEl.classList.add('unseen-flash');
-        dayEl.dataset.unseen = String(unseenByDay[key]);
-        dayEl.title = 'Кто-то снялся со смены. Откройте день, чтобы убрать мигание.';
-      }
+      if (unseenByDay[key]) dayEl.classList.add('unseen-flash');
 
       const num = document.createElement('div');
       num.className = 'num'; num.textContent = d;
@@ -1820,21 +1104,15 @@ $SELF = basename(__FILE__);
       const countEl = document.createElement('div');
       countEl.className = 'people-count' + (approved.length === 0 ? ' zero' : '');
       if (approved.length > 0) {
-        const n = document.createElement('span');
-        n.textContent = approved.length;
-        countEl.appendChild(n);
-        const u = document.createElement('span');
-        u.className = 'u'; u.textContent = 'чел';
-        countEl.appendChild(u);
-      } else {
-        countEl.textContent = '0';
-      }
+        const n = document.createElement('span'); n.textContent = approved.length; countEl.appendChild(n);
+        const u = document.createElement('span'); u.className = 'u'; u.textContent = 'чел'; countEl.appendChild(u);
+      } else countEl.textContent = '0';
       topRight.appendChild(countEl);
       dayEl.appendChild(topRight);
 
       const showEntries = [...approved];
-      if (myEntry && myEntry.status === 'pending') showEntries.push([String(currentMembership.id), myEntry]);
-      if (myEntry && myEntry.status === 'rejected') showEntries.push([String(currentMembership.id), myEntry]);
+      if (myEntry && myEntry.status === 'pending') showEntries.push([currentAccount.key, myEntry]);
+      if (myEntry && myEntry.status === 'rejected') showEntries.push([currentAccount.key, myEntry]);
 
       if (showEntries.length > 0) {
         const namesBox = document.createElement('div');
@@ -1883,16 +1161,16 @@ $SELF = basename(__FILE__);
     }
   }
 
-  function makeUserLi(mid, info, opts) {
+  // ===== МОДАЛКА =====
+  function makeUserLi(uid, info, opts) {
     opts = opts || {};
-    const isMe = currentMembership && mid === String(currentMembership.id);
+    const isMe = currentAccount && uid === currentAccount.key;
     const li = document.createElement('li');
     if (isMe) li.classList.add('me');
     li.classList.add(info.status === 'approved' ? 'approved' : info.status === 'pending' ? 'pending' : 'rejected');
 
     const av = document.createElement('span');
-    av.className = 'avatar';
-    av.textContent = initials(info.name);
+    av.className = 'avatar'; av.textContent = initials(info.name);
     li.appendChild(av);
 
     const infoBox = document.createElement('div');
@@ -1900,21 +1178,26 @@ $SELF = basename(__FILE__);
 
     const n = document.createElement('div');
     n.className = 'u-name';
-    n.innerHTML =
-      (info.role === 'admin' ? '<span class="crown">👑</span> ' : '') +
-      escapeHtml(info.name || '?') +
-      (isMe ? ' (вы)' : '');
+    n.innerHTML = (info.role === 'admin' ? '<span class="crown">👑</span> ' : '') +
+      escapeHtml(info.name || '?') + (isMe ? ' (вы)' : '');
     infoBox.appendChild(n);
 
     const ph = document.createElement('div');
-    if (info.phone_fmt) { ph.className = 'u-phone'; ph.textContent = '📱 ' + info.phone_fmt; }
-    else { ph.className = 'u-phone empty'; ph.textContent = 'телефон не указан'; }
+    if (info.phone) {
+      ph.className = 'u-phone copyable';
+      ph.textContent = '📱 ' + formatPhone(info.phone);
+      ph.title = 'Нажмите, чтобы скопировать';
+      ph.addEventListener('click', (e) => { e.stopPropagation(); copyPhone(info.phone); });
+    } else {
+      ph.className = 'u-phone empty';
+      ph.textContent = 'телефон не указан';
+    }
     infoBox.appendChild(ph);
 
-    if (info.max_username) {
+    if (info.maxUsername) {
       const mx = document.createElement('div');
       mx.className = 'u-phone';
-      mx.textContent = 'MAX: ' + info.max_username;
+      mx.textContent = 'MAX: ' + info.maxUsername;
       infoBox.appendChild(mx);
     }
     li.appendChild(infoBox);
@@ -1923,39 +1206,36 @@ $SELF = basename(__FILE__);
     actions.className = 'actions';
 
     if (info.status === 'approved') {
-      const st = document.createElement('span');
-      st.className = 'status-badge approved'; st.textContent = '✅ В смене';
+      const st = document.createElement('span'); st.className = 'status-badge approved'; st.textContent = '✅ В смене';
       actions.appendChild(st);
     }
     if (info.status === 'rejected') {
-      const st = document.createElement('span');
-      st.className = 'status-badge rejected'; st.textContent = '✗ Отклонена';
+      const st = document.createElement('span'); st.className = 'status-badge rejected'; st.textContent = '✗ Отклонена';
       actions.appendChild(st);
     }
 
     if (opts.showApproveReject && info.status === 'pending') {
       const btnOk = document.createElement('button');
       btnOk.className = 'btn-approve'; btnOk.textContent = '✓ Одобрить';
-      btnOk.addEventListener('click', () => setStatus(parseInt(mid, 10), openDayKey, 'approved'));
+      btnOk.addEventListener('click', () => setStatus(uid, openDayKey, 'approved'));
       actions.appendChild(btnOk);
-
       const btnNo = document.createElement('button');
       btnNo.className = 'btn-reject'; btnNo.textContent = '✗ Отклонить';
-      btnNo.addEventListener('click', () => setStatus(parseInt(mid, 10), openDayKey, 'rejected'));
+      btnNo.addEventListener('click', () => setStatus(uid, openDayKey, 'rejected'));
       actions.appendChild(btnNo);
     }
 
     if (opts.showRestore && info.status === 'rejected') {
       const btnOk = document.createElement('button');
       btnOk.className = 'btn-approve'; btnOk.textContent = '✓ Вернуть';
-      btnOk.addEventListener('click', () => setStatus(parseInt(mid, 10), openDayKey, 'approved'));
+      btnOk.addEventListener('click', () => setStatus(uid, openDayKey, 'approved'));
       actions.appendChild(btnOk);
     }
 
-    if (info.max_username) {
+    if (info.maxUsername) {
       const mx = document.createElement('a');
       mx.className = 'max-btn';
-      mx.href = `https://max.ru/${info.max_username}`;
+      mx.href = maxUrl(info.maxUsername);
       mx.target = '_blank'; mx.rel = 'noopener';
       mx.textContent = 'MAX';
       actions.appendChild(mx);
@@ -1965,50 +1245,44 @@ $SELF = basename(__FILE__);
     return li;
   }
 
-  async function renderModalLists() {
+  function renderModalLists() {
     if (!openDayKey) return;
     const users = allMarks[openDayKey] || {};
     const entries = Object.entries(users);
-
     const approved = entries.filter(([, u]) => u.status === 'approved');
     const pending  = entries.filter(([, u]) => u.status === 'pending');
     const rejected = entries.filter(([, u]) => u.status === 'rejected');
 
     listApproved.innerHTML = '';
     if (approved.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'empty';
+      const li = document.createElement('li'); li.className = 'empty';
       li.textContent = 'Пока никто не в смене';
       listApproved.appendChild(li);
     } else {
-      approved.forEach(([mid, info]) => listApproved.appendChild(makeUserLi(mid, info, {})));
+      approved.forEach(([uid, info]) => listApproved.appendChild(makeUserLi(uid, info, {})));
     }
     secApproved.style.display = '';
     cntApproved.textContent = approved.length;
 
     let visiblePending = pending;
-    if (!isAdmin()) visiblePending = pending.filter(([mid]) => String(currentMembership.id) === mid);
+    if (!isAdmin()) visiblePending = pending.filter(([uid]) => currentAccount.key === uid);
     if (visiblePending.length > 0) {
       listPending.innerHTML = '';
-      visiblePending.forEach(([mid, info]) =>
-        listPending.appendChild(makeUserLi(mid, info, { showApproveReject: isAdmin() })));
+      visiblePending.forEach(([uid, info]) =>
+        listPending.appendChild(makeUserLi(uid, info, { showApproveReject: isAdmin() })));
       secPending.style.display = '';
       cntPending.textContent = visiblePending.length;
-    } else {
-      secPending.style.display = 'none';
-    }
+    } else secPending.style.display = 'none';
 
     let visibleRejected = rejected;
-    if (!isAdmin()) visibleRejected = rejected.filter(([mid]) => String(currentMembership.id) === mid);
+    if (!isAdmin()) visibleRejected = rejected.filter(([uid]) => currentAccount.key === uid);
     if (visibleRejected.length > 0) {
       listRejected.innerHTML = '';
-      visibleRejected.forEach(([mid, info]) =>
-        listRejected.appendChild(makeUserLi(mid, info, { showRestore: isAdmin() })));
+      visibleRejected.forEach(([uid, info]) =>
+        listRejected.appendChild(makeUserLi(uid, info, { showRestore: isAdmin() })));
       secRejected.style.display = '';
       cntRejected.textContent = visibleRejected.length;
-    } else {
-      secRejected.style.display = 'none';
-    }
+    } else secRejected.style.display = 'none';
 
     if (approved.length + pending.length + rejected.length === 0) {
       listApproved.innerHTML = '<li class="empty">Пока никто не отметил этот день</li>';
@@ -2016,49 +1290,51 @@ $SELF = basename(__FILE__);
     }
   }
 
-  async function openModal(key, dayNumber, focusComposer) {
+  async function markDaySeen(key) {
+    // помечаем все непросмотренные события дня как seen для меня
+    try {
+      const snap = await get(child(ref(db), `dayEvents/${currentWorkshop.key}/${key}`));
+      if (!snap.exists()) return;
+      const data = snap.val();
+      const updates = {};
+      Object.keys(data).forEach(evId => {
+        const ev = data[evId];
+        if (ev.actorKey === currentAccount.key) return;
+        updates[`dayEventsSeen/${currentWorkshop.key}/${key}/${evId}/${currentAccount.key}`] = true;
+      });
+      if (Object.keys(updates).length) await update(ref(db), updates);
+    } catch (e) { console.error(e); }
+  }
+
+  function openModal(key, dayNumber, focusComposer) {
     openDayKey = key;
     const users = allMarks[key] || {};
-    const entries = Object.entries(users);
-    const total = entries.length;
+    const total = Object.keys(users).length;
     const [y, m] = key.split('-');
     modalTitle.textContent = total ? `День ${dayNumber} · всего ${total}` : 'День ' + dayNumber;
     modalDate.textContent = `${dayNumber} ${monthNames[parseInt(m,10)-1]} ${y}`;
 
     messagesList.innerHTML = '';
     messagesEmpty.classList.add('hidden');
-    if (cntMessages) cntMessages.textContent = '0';
+    cntMessages.textContent = '0';
     msgInput.value = '';
-    msgSend.disabled = !currentMembership;
+    msgSend.disabled = !currentAccount;
 
     modalBackdrop.classList.add('open');
     if (focusComposer) setTimeout(() => msgInput.focus(), 100);
 
-    const hadUnseen = !!(unseenByDay[key] && unseenByDay[key] > 0);
-    if (hadUnseen && currentWorkshop) {
-      try {
-        await api(`/api/workshops/${currentWorkshop.id}/day_events/mark_seen`, {
-          method: 'POST', body: { day: key }
-        });
-      } catch (e) { console.error(e); }
-      delete unseenByDay[key];
-      const domDays = document.querySelectorAll('.days .day');
-      domDays.forEach(el => {
-        const numEl = el.querySelector('.num');
-        if (numEl && parseInt(numEl.textContent, 10) === dayNumber) {
-          el.classList.remove('unseen-flash');
-          el.removeAttribute('data-unseen');
-          el.removeAttribute('title');
-        }
-      });
-    }
+    markDaySeen(key);
 
-    try {
-      const list = await api(`/api/workshops/${currentWorkshop.id}/messages?day=${encodeURIComponent(key)}`);
+    if (unsubModalMsgs) unsubModalMsgs();
+    unsubModalMsgs = onValue(ref(db, `messages/${currentWorkshop.key}/${key}`), snap => {
+      const data = snap.val() || {};
+      const list = Object.entries(data)
+        .map(([id, v]) => ({ id, ...v }))
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
       renderMessages(list);
-    } catch (e) { console.error(e); }
+    });
 
-    await renderModalLists();
+    renderModalLists();
     modalBody.scrollTop = 0;
   }
 
@@ -2066,22 +1342,29 @@ $SELF = basename(__FILE__);
     messagesList.innerHTML = '';
     if (!list || list.length === 0) {
       messagesEmpty.classList.remove('hidden');
-      if (cntMessages) cntMessages.textContent = '0';
+      cntMessages.textContent = '0';
       return;
     }
     messagesEmpty.classList.add('hidden');
-    if (cntMessages) cntMessages.textContent = list.length;
+    cntMessages.textContent = list.length;
 
     list.forEach(m => {
       const el = document.createElement('div');
-      el.className = 'msg' + (currentMembership && m.membership_id === currentMembership.id ? ' mine' : '');
+      el.className = 'msg' + (currentAccount && m.accountKey === currentAccount.key ? ' mine' : '');
       const meta = document.createElement('div'); meta.className = 'meta';
       const who = document.createElement('span'); who.className = 'who';
-      who.textContent = (m.role === 'admin' ? '👑 ' : '') + m.user_name;
+      who.textContent = (m.role === 'admin' ? '👑 ' : '') + m.userName;
       meta.appendChild(who);
-      if (m.phone_fmt) { const ph = document.createElement('span'); ph.textContent = '· ' + m.phone_fmt; meta.appendChild(ph); }
-      if (m.max_username) { const mx = document.createElement('span'); mx.textContent = '· MAX: ' + m.max_username; meta.appendChild(mx); }
-      const t = document.createElement('span'); t.textContent = '· ' + formatTime(m.created_at); meta.appendChild(t);
+      if (m.phone) {
+        const ph = document.createElement('span');
+        ph.className = 'copyable';
+        ph.textContent = '· ' + formatPhone(m.phone);
+        ph.title = 'Нажмите, чтобы скопировать';
+        ph.addEventListener('click', (e) => { e.stopPropagation(); copyPhone(m.phone); });
+        meta.appendChild(ph);
+      }
+      if (m.maxUsername) { const mx = document.createElement('span'); mx.textContent = '· MAX: ' + m.maxUsername; meta.appendChild(mx); }
+      const t = document.createElement('span'); t.textContent = '· ' + formatTime(m.createdAt); meta.appendChild(t);
       el.appendChild(meta);
       const txt = document.createElement('div'); txt.className = 'text'; txt.textContent = m.text; el.appendChild(txt);
       messagesList.appendChild(el);
@@ -2091,29 +1374,36 @@ $SELF = basename(__FILE__);
   }
 
   async function sendMessage() {
-    if (!currentMembership || !openDayKey) return;
+    if (!currentAccount || !openDayKey) return;
     const text = msgInput.value.trim(); if (!text) return;
     msgSend.disabled = true;
     try {
-      const data = await api(`/api/workshops/${currentWorkshop.id}/messages`, {
-        method: 'POST', body: { day: openDayKey, text }
+      await push(ref(db, `messages/${currentWorkshop.key}/${openDayKey}`), {
+        text,
+        accountKey: currentAccount.key,
+        userName: currentMembership.name,
+        phone: currentAccount.phone || '',
+        maxUsername: currentAccount.maxUsername || '',
+        role: isCreator() ? 'admin' : (currentMembership.role || 'worker'),
+        createdAt: Date.now()
       });
-      if (!data.ok) { alert(data.error || 'Ошибка отправки'); return; }
       msgInput.value = ''; msgInput.style.height = 'auto';
-      const list = await api(`/api/workshops/${currentWorkshop.id}/messages?day=${encodeURIComponent(openDayKey)}`);
-      renderMessages(list);
-      await loadMessageCounts();
-    } catch (e) { alert('Ошибка сети'); }
-    finally { msgSend.disabled = false; msgInput.focus(); }
+      msgInput.focus();
+    } catch (e) { alert('Ошибка отправки'); }
+    finally { msgSend.disabled = !msgInput.value.trim(); }
   }
 
-  function closeModal() { modalBackdrop.classList.remove('open'); openDayKey = null; }
+  function closeModal() {
+    modalBackdrop.classList.remove('open');
+    openDayKey = null;
+    if (unsubModalMsgs) { unsubModalMsgs(); unsubModalMsgs = null; }
+  }
   modalClose.addEventListener('click', closeModal);
   modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeModal(); });
   msgInput.addEventListener('input', () => {
     msgInput.style.height = 'auto';
     msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
-    msgSend.disabled = !msgInput.value.trim() || !currentMembership;
+    msgSend.disabled = !msgInput.value.trim() || !currentAccount;
   });
   msgInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!msgSend.disabled) sendMessage(); }
@@ -2137,32 +1427,32 @@ $SELF = basename(__FILE__);
     if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) changeMonth(dx > 0 ? -1 : 1);
   }, { passive: true });
 
+  // ===== Обработчики авторизации =====
   accLoginBtn.addEventListener('click', loginAccount);
-  accRegisterBtn.addEventListener('click', registerAccount);
   accPass.addEventListener('keydown', e => { if (e.key === 'Enter') loginAccount(); });
-  accLogoutBtn.addEventListener('click', logoutAccount);
+  accRegisterBtn.addEventListener('click', () => {
+    // Первый клик — раскрываем доп. поля; повторный — регистрируем
+    if (accPhoneRow.classList.contains('hidden')) {
+      accPhoneRow.classList.remove('hidden');
+      accMaxRow.classList.remove('hidden');
+      accountTitle.textContent = 'Регистрация аккаунта';
+      accLoginBtn.classList.add('hidden');
+      setHint(accHint, 'Придумайте логин и пароль (мин. 3 символа).');
+      return;
+    }
+    registerAccount();
+  });
 
   workshopEnterBtn.addEventListener('click', enterWorkshop);
   workshopPass.addEventListener('keydown', e => { if (e.key === 'Enter') enterWorkshop(); });
   showCreateWorkshopBtn.addEventListener('click', showCreateWorkshopForm);
   showJoinWorkshopBtn.addEventListener('click', showJoinWorkshopForm);
   createWorkshopBtn.addEventListener('click', createWorkshop);
-
-  toggleAdminBtn.addEventListener('click', toggleAdmin);
-  switchWorkshopBtn.addEventListener('click', async () => {
-    await api('/api/session/leave_workshop', { method: 'POST' });
-    currentWorkshop = null; currentMembership = null; allMarks = {}; msgCounts = {}; unseenByDay = {};
-    await restoreSession();
-  });
-  leaveWorkshopBtn.addEventListener('click', leaveWorkshop);
-  logoutBtn.addEventListener('click', logoutAccount);
-
-  setInterval(() => {
-    if (currentWorkshop && currentMembership && !openDayKey) {
-      loadMarks();
-      loadMessageCounts();
-    }
-  }, 30000);
+  backToAccountBtn.addEventListener('click', backToAccount);
+  logoutBtn.addEventListener('click', logoutAll);
+  switchWsBtn.addEventListener('click', openWsMenu);
+  wsMenuClose.addEventListener('click', () => wsMenu.classList.remove('open'));
+  wsMenu.addEventListener('click', e => { if (e.target === wsMenu) wsMenu.classList.remove('open'); });
 
   renderCalendar();
   restoreSession();
