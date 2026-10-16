@@ -184,6 +184,12 @@
   .days .day .chat-btn.has-msg { background: #1976d2; color: #fff; box-shadow: 0 2px 4px rgba(25,118,210,0.4); }
   .days .day .chat-btn .badge { font-size: 11px; font-weight: 900; }
 
+  /* Скрытие одобренных в календаре (настройка админа) */
+  .days.hide-approved .day .people-count { display: none !important; }
+  .days.hide-approved .day .names { display: none !important; }
+  .days.hide-approved .day .dots .dot:not(.pending):not(.rejected) { display: none !important; }
+  .days.hide-approved .day.has-users { background: #f5f5f5; color: #222; }
+
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6);
     display: none; align-items: center; justify-content: center;
     padding: 8px; z-index: 100; }
@@ -192,14 +198,26 @@
     height: 92vh; max-height: 92vh; box-shadow: 0 10px 40px rgba(0,0,0,0.4);
     animation: pop 0.15s ease-out; display: flex; flex-direction: column; overflow: hidden; }
   @keyframes pop { from { transform: scale(0.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  .modal-header { padding: 14px 56px 10px 16px; border-bottom: 1px solid #eee; flex-shrink: 0; position: relative; }
+  .modal-header { padding: 14px 100px 10px 16px; border-bottom: 1px solid #eee; flex-shrink: 0; position: relative; }
   .modal-header h3 { margin: 0 0 4px; font-size: 20px; color: #222; }
   .modal-header .date-label { font-size: 14px; color: #888; }
   .modal-header .close-x { position: absolute; top: 10px; right: 10px; width: 38px; height: 38px;
     border: none; border-radius: 50%; background: #f0f0f0; color: #555; font-size: 22px; font-weight: 700;
     cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .modal-header .close-x:active { background: #e0e0e0; }
+  .modal-header .settings-x { position: absolute; top: 10px; right: 54px;
+    width: 38px; height: 38px; border: none; border-radius: 50%;
+    background: #f0f0f0; color: #555; font-size: 18px;
+    cursor: pointer; display: none; align-items: center; justify-content: center; }
+  .modal-header .settings-x:active { background: #e0e0e0; }
   .modal-body { flex: 1 1 auto; overflow-y: auto; padding: 12px 16px; background: #fafafa; }
+
+  .day-settings { background: #fff8e1; border: 1px solid #ffe082; border-radius: 12px;
+    padding: 10px 12px; margin-bottom: 12px; }
+  .day-settings .ds-row { display: flex; align-items: center; gap: 10px;
+    font-size: 15px; font-weight: 600; color: #5d4200; cursor: pointer; }
+  .day-settings .ds-row input { width: 20px; height: 20px; accent-color: #ffa000; }
+  .day-settings .ds-hint { font-size: 12px; color: #8d6e00; margin-top: 6px; line-height: 1.4; }
 
   .section-title { font-size: 13px; font-weight: 700; color: #666; text-transform: uppercase;
     letter-spacing: 0.5px; margin: 10px 0 8px; display: flex; align-items: center; gap: 8px; }
@@ -338,7 +356,6 @@
     flex-shrink: 0; transition: transform 0.1s, background 0.15s;
   }
   .ws-modal .item .del-btn:active { transform: scale(0.9); background: #f8bbd0; }
-  .ws-modal .item .del-btn:hover { background: #f8bbd0; }
   .ws-modal .foot { padding: 12px; border-top: 1px solid #eee; background: #fafafa;
     display: flex; flex-direction: column; gap: 8px; }
   .ws-modal .foot button { width: 100%; padding: 13px; border-radius: 12px;
@@ -376,6 +393,31 @@
   .del-modal .box .btn-danger { background: #d32f2f; color: #fff; }
   .del-modal .box .btn-danger:active { background: #b71c1c; }
   .del-modal .box .btn-danger:disabled { background: #ef9a9a; cursor: wait; }
+
+  /* ===== Мои цеха (шаг 2) ===== */
+  .my-ws-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+  .my-ws-list .item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border: 2px solid #e0e0e0; border-radius: 14px;
+    background: #fff; cursor: pointer; transition: all 0.15s;
+  }
+  .my-ws-list .item:active { transform: scale(0.98); }
+  .my-ws-list .item .left { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .my-ws-list .item .nm {
+    font-weight: 800; font-size: 16px; color: #222;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .my-ws-list .item .rl { font-size: 12px; color: #666; margin-top: 2px; }
+  .my-ws-list .item .enter {
+    padding: 8px 14px; border-radius: 10px; border: none;
+    background: #4CAF50; color: #fff; font-weight: 700; font-size: 14px;
+    cursor: pointer; flex-shrink: 0;
+  }
+  .my-ws-list .item .enter:active { background: #388e3c; }
+  .my-ws-list .empty {
+    text-align: center; color: #999; font-style: italic;
+    font-size: 14px; padding: 16px 10px;
+  }
 
   @media (min-width: 560px) {
     .header h2 { font-size: 24px; }
@@ -422,9 +464,11 @@
     .days .day .chat-btn { min-width: 28px; height: 28px; padding: 0 6px; font-size: 12px; border-radius: 14px; top: 4px; right: 4px; }
     .days .day .chat-btn .badge { font-size: 10px; }
     .modal { border-radius: 14px; }
-    .modal-header { padding: 12px 50px 8px 14px; }
+    .modal-header { padding: 12px 96px 8px 14px; }
     .modal-header h3 { font-size: 17px; }
     .modal-header .date-label { font-size: 13px; }
+    .modal-header .close-x, .modal-header .settings-x { width: 34px; height: 34px; font-size: 18px; }
+    .modal-header .settings-x { right: 50px; }
     .users-list li { padding: 7px 9px; gap: 8px; font-size: 14px; }
     .users-list li .avatar { width: 30px; height: 30px; font-size: 13px; }
     .users-list li .u-name { font-size: 14px; }
@@ -463,7 +507,18 @@
   <div class="auth hidden" id="workshopBlock">
     <div class="center"><span class="step-badge">Шаг 2 — Цех</span></div>
     <h3>Вход в цех</h3>
-    <div id="workshopListWrap">
+
+    <!-- Режим A: список доступных цехов (пароль не нужен) -->
+    <div id="myWsListWrap">
+      <div class="form-row" style="margin-bottom:6px;">
+        <input type="text" id="myWsSearch" placeholder="🔍 Поиск по моим цехам..." autocomplete="off">
+      </div>
+      <div class="my-ws-list" id="myWsList"></div>
+      <button class="btn-link" id="showAddWsBtn">+ Добавить ещё цех по паролю</button>
+    </div>
+
+    <!-- Режим B: добавление нового цеха по паролю -->
+    <div id="addWsWrap" class="hidden">
       <div class="form-row" style="margin-bottom:6px;">
         <input type="text" id="workshopSearch" placeholder="🔍 Поиск цеха..." autocomplete="off">
       </div>
@@ -472,12 +527,16 @@
       <div class="form-row"><input type="text" id="membershipName" placeholder="Ваше имя в цехе" autocomplete="off"></div>
       <button class="btn-primary" id="workshopEnterBtn">Войти в цех</button>
       <button class="btn-link" id="showCreateWorkshopBtn">+ Создать новый цех</button>
+      <button class="btn-link" id="cancelAddWsBtn">← Назад к моим цехам</button>
     </div>
+
+    <!-- Режим C: создание нового цеха -->
     <div id="workshopCreateWrap" class="hidden">
       <div class="form-row"><input type="text" id="newWorkshopLine" placeholder="Название цеха и пароль (пример: Сборка 12345)" autocomplete="off"></div>
       <button class="btn-primary" id="createWorkshopBtn">Создать цех</button>
-      <button class="btn-link" id="showJoinWorkshopBtn">← Назад к выбору</button>
+      <button class="btn-link" id="showJoinWorkshopBtn">← Назад к добавлению</button>
     </div>
+
     <button class="btn-link hidden" id="backToCalendarBtn">← Вернуться к календарю</button>
     <button class="btn-link" id="backToAccountBtn">← Сменить аккаунт</button>
     <div class="hint" id="workshopHint"></div>
@@ -514,9 +573,21 @@
     <div class="modal-header">
       <h3 id="modalTitle">День</h3>
       <div class="date-label" id="modalDate"></div>
+      <button class="settings-x" id="modalSettings" title="Настройки">⚙️</button>
       <button class="close-x" id="modalClose">✕</button>
     </div>
     <div class="modal-body" id="modalBody">
+      <div class="day-settings hidden" id="daySettings">
+        <label class="ds-row">
+          <input type="checkbox" id="setShowApproved">
+          <span>Показывать одобренных в календаре</span>
+        </label>
+        <div class="ds-hint">
+          Влияет только на сетку календаря (фон, счётчик, имена).
+          Внутри карточки дня все участники — одобренные, заявки и отклонённые — видны всегда.
+        </div>
+      </div>
+
       <div class="section-title">💬 Сообщения <span class="cnt" id="cntMessages">0</span></div>
       <div class="messages-list" id="messagesList"></div>
       <div class="messages-empty hidden" id="messagesEmpty">Сообщений пока нет — напишите первое 👇</div>
@@ -615,18 +686,24 @@
   const workshopSearch = $('workshopSearch');
   const workshopPass = $('workshopPass'), workshopEnterBtn = $('workshopEnterBtn');
   const workshopHint = $('workshopHint');
-  const workshopListWrap = $('workshopListWrap'), workshopCreateWrap = $('workshopCreateWrap');
   const newWorkshopLine = $('newWorkshopLine');
   const membershipName = $('membershipName');
   const createWorkshopBtn = $('createWorkshopBtn');
   const showCreateWorkshopBtn = $('showCreateWorkshopBtn'), showJoinWorkshopBtn = $('showJoinWorkshopBtn');
   const backToAccountBtn = $('backToAccountBtn'), backToCalendarBtn = $('backToCalendarBtn');
 
+  const myWsListWrap = $('myWsListWrap'), myWsList = $('myWsList'), myWsSearch = $('myWsSearch');
+  const addWsWrap = $('addWsWrap');
+  const showAddWsBtn = $('showAddWsBtn'), cancelAddWsBtn = $('cancelAddWsBtn');
+
+  const workshopCreateWrap = $('workshopCreateWrap');
+
   const loggedBar = $('loggedBar'), loggedName = $('loggedName'), loggedWorkshop = $('loggedWorkshop');
   const loggedPhone = $('loggedPhone'), logoutBtn = $('logoutBtn'), switchWsBtn = $('switchWsBtn');
 
   const modalBackdrop = $('modalBackdrop'), modalTitle = $('modalTitle'), modalDate = $('modalDate');
   const modalBody = $('modalBody'), modalClose = $('modalClose');
+  const modalSettings = $('modalSettings'), daySettings = $('daySettings'), setShowApproved = $('setShowApproved');
   const secApproved = $('secApproved'), listApproved = $('listApproved'), cntApproved = $('cntApproved');
   const secPending = $('secPending'), listPending = $('listPending'), cntPending = $('cntPending');
   const secRejected = $('secRejected'), listRejected = $('listRejected'), cntRejected = $('cntRejected');
@@ -650,10 +727,12 @@
   let currentMembership = null;
   let myWorkshops = [];
   let allWorkshopsList = [];
+  let availableWorkshops = []; // уже добавленные цеха этого аккаунта (userWorkshops)
   let allMarks = {}, msgCounts = {}, unseenByDay = {};
+  let workshopSettings = { showApprovedInCalendar: true };
   let openDayKey = null;
   let pendingDeleteWs = null;
-  let unsubMarks = null, unsubMsgCounts = null, unsubEvents = null, unsubModalMsgs = null;
+  let unsubMarks = null, unsubMsgCounts = null, unsubEvents = null, unsubModalMsgs = null, unsubSettings = null;
 
   const isCreator = () => currentWorkshop && currentAccount && currentWorkshop.createdBy === currentAccount.key;
   const isAdmin = () => {
@@ -747,19 +826,31 @@
     accPass.value = '';
     setHint(accHint, '');
   }
-  function showWorkshopStep(returnToCalendar) {
+  async function showWorkshopStep(returnToCalendar) {
     loadingBlock.classList.add('hidden');
     accountBlock.classList.add('hidden');
     workshopBlock.classList.remove('hidden');
     loggedBar.classList.add('hidden');
     lockCalendar(true);
-    loadWorkshops();
+
     membershipName.value = currentAccount.login;
     if (workshopSearch) workshopSearch.value = '';
     setHint(workshopHint, '');
     workshopCreateWrap.classList.add('hidden');
-    workshopListWrap.classList.remove('hidden');
+    addWsWrap.classList.add('hidden');
     backToCalendarBtn.classList.toggle('hidden', !(returnToCalendar && currentWorkshop));
+
+    await loadAvailableWorkshops();
+
+    if (availableWorkshops.length > 0) {
+      myWsListWrap.classList.remove('hidden');
+      myWsSearch.value = '';
+      renderMyWsList();
+    } else {
+      myWsListWrap.classList.add('hidden');
+      addWsWrap.classList.remove('hidden');
+      await loadWorkshops();
+    }
   }
   function showLoggedIn() {
     loadingBlock.classList.add('hidden');
@@ -783,6 +874,7 @@
     subscribeMarks();
     subscribeMsgCounts();
     subscribeEvents();
+    subscribeSettings();
   }
 
   function saveSession() {
@@ -864,6 +956,105 @@
     } catch (e) { setHint(accHint, 'Ошибка сети', true); console.error(e); }
   }
 
+  // ===== СПИСОК ЦЕХОВ АККАУНТА (userWorkshops) =====
+  async function loadAvailableWorkshops() {
+    availableWorkshops = [];
+    try {
+      const snap = await get(child(ref(db), `userWorkshops/${currentAccount.key}`));
+      if (!snap.exists()) return;
+      const data = snap.val();
+      const wsKeys = Object.keys(data);
+      if (wsKeys.length === 0) return;
+
+      const wsSnap = await get(child(ref(db), 'workshops'));
+      const wsData = wsSnap.exists() ? wsSnap.val() : {};
+      const memSnap = await get(child(ref(db), `memberships`));
+      const memData = memSnap.exists() ? memSnap.val() : {};
+
+      availableWorkshops = wsKeys
+        .filter(k => wsData[k])
+        .map(k => ({
+          key: k,
+          name: wsData[k].name || k,
+          myName: (memData[k] && memData[k][currentAccount.key] && memData[k][currentAccount.key].name) || '',
+          role: (memData[k] && memData[k][currentAccount.key] && memData[k][currentAccount.key].role) || 'worker',
+          createdBy: wsData[k].createdBy || null
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    } catch (e) { console.error(e); }
+  }
+
+  function renderMyWsList() {
+    myWsList.innerHTML = '';
+    const q = (myWsSearch.value || '').trim().toLowerCase();
+    const filtered = q
+      ? availableWorkshops.filter(w =>
+          w.name.toLowerCase().includes(q) ||
+          (w.myName || '').toLowerCase().includes(q))
+      : availableWorkshops;
+
+    if (filtered.length === 0) {
+      myWsList.innerHTML = '<div class="empty">Ничего не найдено</div>';
+      return;
+    }
+
+    filtered.forEach(w => {
+      const isOwner = w.createdBy === currentAccount.key;
+      const el = document.createElement('div');
+      el.className = 'item';
+
+      const left = document.createElement('div');
+      left.className = 'left';
+      const nm = document.createElement('div');
+      nm.className = 'nm';
+      nm.textContent = (isOwner ? '👑 ' : '') + w.name;
+      const rl = document.createElement('div');
+      rl.className = 'rl';
+      rl.textContent = (w.myName || currentAccount.login) + ' · ' +
+        (isOwner ? 'создатель' : w.role === 'admin' ? 'админ' : 'рабочий');
+      left.appendChild(nm); left.appendChild(rl);
+      el.appendChild(left);
+
+      const btn = document.createElement('button');
+      btn.className = 'enter';
+      btn.textContent = 'Войти';
+      btn.addEventListener('click', (e) => { e.stopPropagation(); enterWorkshopNoPass(w); });
+      el.appendChild(btn);
+
+      el.addEventListener('click', () => enterWorkshopNoPass(w));
+      myWsList.appendChild(el);
+    });
+  }
+
+  async function enterWorkshopNoPass(w) {
+    setHint(workshopHint, '');
+    try {
+      const memSnap = await get(child(ref(db), `memberships/${w.key}/${currentAccount.key}`));
+      if (!memSnap.exists()) {
+        await remove(ref(db, `userWorkshops/${currentAccount.key}/${w.key}`));
+        setHint(workshopHint, 'Цех больше недоступен', true);
+        await showWorkshopStep(false);
+        return;
+      }
+      const wSnap = await get(child(ref(db), `workshops/${w.key}`));
+      if (!wSnap.exists()) {
+        await remove(ref(db, `userWorkshops/${currentAccount.key}/${w.key}`));
+        setHint(workshopHint, 'Цех больше не существует', true);
+        await showWorkshopStep(false);
+        return;
+      }
+      const wd = wSnap.val();
+      const m = memSnap.val();
+      currentWorkshop = { key: w.key, name: wd.name, createdBy: wd.createdBy, maxChat: wd.maxChat || '' };
+      currentMembership = { name: m.name, role: m.role || 'worker', joinedAt: m.joinedAt || Date.now() };
+      saveSession();
+      showLoggedIn();
+    } catch (e) {
+      setHint(workshopHint, 'Ошибка сети', true);
+      console.error(e);
+    }
+  }
+
   async function loadWorkshops() {
     try {
       const snap = await get(child(ref(db), 'workshops'));
@@ -932,6 +1123,7 @@
       const role = existing ? (existing.role || 'worker') : 'worker';
       const mem = { name: myName, role, joinedAt: existing ? existing.joinedAt : Date.now() };
       await set(ref(db, `memberships/${key}/${currentAccount.key}`), mem);
+      await set(ref(db, `userWorkshops/${currentAccount.key}/${key}`), true);
       currentWorkshop = { key, name: w.name, createdBy: w.createdBy, maxChat: w.maxChat || '' };
       currentMembership = mem;
       workshopPass.value = '';
@@ -956,11 +1148,13 @@
       if (snap.exists()) { setHint(workshopHint, 'Цех с таким названием уже есть', true); return; }
       await set(ref(db, `workshops/${key}`), {
         name, passHash: await sha256(password),
-        maxChat: '', createdBy: currentAccount.key, createdAt: Date.now()
+        maxChat: '', createdBy: currentAccount.key, createdAt: Date.now(),
+        settings: { showApprovedInCalendar: true }
       });
       const myName = currentAccount.login;
       const mem = { name: myName, role: 'admin', joinedAt: Date.now() };
       await set(ref(db, `memberships/${key}/${currentAccount.key}`), mem);
+      await set(ref(db, `userWorkshops/${currentAccount.key}/${key}`), true);
       currentWorkshop = { key, name, createdBy: currentAccount.key, maxChat: '' };
       currentMembership = mem;
       newWorkshopLine.value = '';
@@ -970,18 +1164,11 @@
     } catch (e) { setHint(workshopHint, 'Ошибка сети', true); console.error(e); }
   }
 
-  function showCreateWorkshopForm() {
-    workshopListWrap.classList.add('hidden'); workshopCreateWrap.classList.remove('hidden');
-    setHint(workshopHint, 'Пример: Сборка 12345 — название «Сборка», пароль «12345».');
-  }
-  function showJoinWorkshopForm() {
-    workshopCreateWrap.classList.add('hidden'); workshopListWrap.classList.remove('hidden');
-    setHint(workshopHint, ''); loadWorkshops();
-  }
   function backToAccount() {
     unsubscribeAll();
     currentAccount = null; currentWorkshop = null; currentMembership = null;
     allMarks = {}; msgCounts = {}; unseenByDay = {};
+    availableWorkshops = [];
     clearSession();
     showAccountStep();
   }
@@ -993,7 +1180,7 @@
     showLoggedIn();
   }
 
-  // ===== МОДАЛКА «МОИ ЦЕХА» =====
+  // ===== МОДАЛКА «МОИ ЦЕХА» (кнопка «Сменить цех») =====
   async function openWsModal() {
     wsModalList.innerHTML = '<div class="empty">Загрузка…</div>';
     wsModal.classList.add('open');
@@ -1107,7 +1294,7 @@
     showWorkshopStep(true);
   }
 
-  // ===== УДАЛЕНИЕ ЦЕХА (только создатель) =====
+  // ===== УДАЛЕНИЕ ЦЕХА =====
   function askDeleteWorkshop(w) {
     if (!currentAccount || w.createdBy !== currentAccount.key) {
       alert('Удалять цех может только его создатель.');
@@ -1134,6 +1321,17 @@
     delModalConfirm.disabled = true;
     delModalConfirm.textContent = 'Удаление…';
     try {
+      // Чистим userWorkshops у всех участников
+      const memSnap = await get(child(ref(db), `memberships/${w.key}`));
+      if (memSnap.exists()) {
+        const mems = memSnap.val();
+        const updates = {};
+        Object.keys(mems).forEach(accKey => {
+          updates[`userWorkshops/${accKey}/${w.key}`] = null;
+        });
+        if (Object.keys(updates).length) await update(ref(db), updates);
+      }
+
       await remove(ref(db, `workshops/${w.key}`));
       await remove(ref(db, `memberships/${w.key}`));
       await remove(ref(db, `marks/${w.key}`));
@@ -1189,6 +1387,7 @@
     if (unsubMsgCounts) { unsubMsgCounts(); unsubMsgCounts = null; }
     if (unsubEvents) { unsubEvents(); unsubEvents = null; }
     if (unsubModalMsgs) { unsubModalMsgs(); unsubModalMsgs = null; }
+    if (unsubSettings) { unsubSettings(); unsubSettings = null; }
   }
 
   function subscribeMarks() {
@@ -1225,6 +1424,20 @@
       unseenByDay = unseen;
       renderCalendar();
     });
+  }
+  function subscribeSettings() {
+    if (unsubSettings) unsubSettings();
+    unsubSettings = onValue(ref(db, `workshops/${currentWorkshop.key}/settings`), snap => {
+      const s = snap.val() || {};
+      workshopSettings = {
+        showApprovedInCalendar: s.showApprovedInCalendar !== false
+      };
+      applySettingsToUI();
+      renderCalendar();
+    });
+  }
+  function applySettingsToUI() {
+    daysEl.classList.toggle('hide-approved', !workshopSettings.showApprovedInCalendar);
   }
 
   async function toggleDay(key) {
@@ -1280,6 +1493,8 @@
       e.classList.add('day', 'empty'); daysEl.appendChild(e);
     }
 
+    const hideApproved = !workshopSettings.showApprovedInCalendar;
+
     for (let d = 1; d <= daysInMonth; d++) {
       const key = dayKey(currentYear, currentMonth, d);
       const users = allMarks[key] || {};
@@ -1295,7 +1510,7 @@
       if (d === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear())
         dayEl.classList.add('today');
 
-      if (approved.length > 0) {
+      if (!hideApproved && approved.length > 0) {
         dayEl.classList.add(myStatus === 'approved' ? 'mine' : 'has-users');
       } else if (pending.length > 0) {
         dayEl.classList.add(myStatus === 'pending' ? 'mine-pending' : 'has-pending');
@@ -1320,15 +1535,15 @@
       }
 
       const countEl = document.createElement('div');
-      countEl.className = 'people-count' + (approved.length === 0 ? ' zero' : '');
-      if (approved.length > 0) {
+      countEl.className = 'people-count' + (approved.length === 0 || hideApproved ? ' zero' : '');
+      if (approved.length > 0 && !hideApproved) {
         const n = document.createElement('span'); n.textContent = approved.length; countEl.appendChild(n);
         const u = document.createElement('span'); u.className = 'u'; u.textContent = 'чел'; countEl.appendChild(u);
       } else countEl.textContent = '0';
       topRight.appendChild(countEl);
       dayEl.appendChild(topRight);
 
-      const showEntries = [...approved];
+      const showEntries = hideApproved ? [] : [...approved];
       if (myEntry && myEntry.status === 'pending') showEntries.push([currentAccount.key, myEntry]);
       if (myEntry && myEntry.status === 'rejected') showEntries.push([currentAccount.key, myEntry]);
 
@@ -1356,7 +1571,7 @@
 
       const dots = document.createElement('div');
       dots.className = 'dots';
-      if (approved.length > 0) { const dd = document.createElement('div'); dd.className = 'dot'; dots.appendChild(dd); }
+      if (!hideApproved && approved.length > 0) { const dd = document.createElement('div'); dd.className = 'dot'; dots.appendChild(dd); }
       if (pending.length > 0)  { const dd = document.createElement('div'); dd.className = 'dot pending'; dots.appendChild(dd); }
       if (rejected.length > 0) { const dd = document.createElement('div'); dd.className = 'dot rejected'; dots.appendChild(dd); }
       if (dots.children.length > 0) dayEl.appendChild(dots);
@@ -1466,6 +1681,7 @@
     return li;
   }
 
+  // В модалке дня видны ВСЕ: одобренные, pending, rejected.
   function renderModalLists() {
     if (!openDayKey) return;
     const users = allMarks[openDayKey] || {};
@@ -1474,35 +1690,41 @@
     const pending  = entries.filter(([, u]) => u.status === 'pending');
     const rejected = entries.filter(([, u]) => u.status === 'rejected');
 
+    // Одобренные
     listApproved.innerHTML = '';
     if (approved.length === 0) {
       const li = document.createElement('li'); li.className = 'empty';
       li.textContent = 'Пока никто не в смене';
       listApproved.appendChild(li);
     } else {
-      approved.forEach(([uid, info]) => listApproved.appendChild(makeUserLi(uid, info, { showRoleToggle: true })));
+      approved.forEach(([uid, info]) =>
+        listApproved.appendChild(makeUserLi(uid, info, { showRoleToggle: true })));
     }
     secApproved.style.display = '';
     cntApproved.textContent = approved.length;
 
-    let visiblePending = pending;
-    if (!isAdmin()) visiblePending = pending.filter(([uid]) => currentAccount.key === uid);
-    if (visiblePending.length > 0) {
+    // Заявки — видны всем, кнопки только админу
+    if (pending.length > 0) {
       listPending.innerHTML = '';
-      visiblePending.forEach(([uid, info]) =>
-        listPending.appendChild(makeUserLi(uid, info, { showApproveReject: isAdmin(), showRoleToggle: true })));
+      pending.forEach(([uid, info]) =>
+        listPending.appendChild(makeUserLi(uid, info, {
+          showApproveReject: isAdmin(),
+          showRoleToggle: true
+        })));
       secPending.style.display = '';
-      cntPending.textContent = visiblePending.length;
+      cntPending.textContent = pending.length;
     } else secPending.style.display = 'none';
 
-    let visibleRejected = rejected;
-    if (!isAdmin()) visibleRejected = rejected.filter(([uid]) => currentAccount.key === uid);
-    if (visibleRejected.length > 0) {
+    // Отклонённые — видны всем, «Вернуть» только админу
+    if (rejected.length > 0) {
       listRejected.innerHTML = '';
-      visibleRejected.forEach(([uid, info]) =>
-        listRejected.appendChild(makeUserLi(uid, info, { showRestore: isAdmin(), showRoleToggle: true })));
+      rejected.forEach(([uid, info]) =>
+        listRejected.appendChild(makeUserLi(uid, info, {
+          showRestore: isAdmin(),
+          showRoleToggle: true
+        })));
       secRejected.style.display = '';
-      cntRejected.textContent = visibleRejected.length;
+      cntRejected.textContent = rejected.length;
     } else secRejected.style.display = 'none';
 
     if (approved.length + pending.length + rejected.length === 0) {
@@ -1539,6 +1761,11 @@
     cntMessages.textContent = '0';
     msgInput.value = '';
     msgSend.disabled = !currentAccount;
+
+    // Настройки — только админ
+    modalSettings.style.display = isAdmin() ? 'flex' : 'none';
+    daySettings.classList.add('hidden');
+    setShowApproved.checked = workshopSettings.showApprovedInCalendar;
 
     modalBackdrop.classList.add('open');
     if (focusComposer) setTimeout(() => msgInput.focus(), 100);
@@ -1665,12 +1892,42 @@
   workshopPass.addEventListener('keydown', e => { if (e.key === 'Enter') enterWorkshop(); });
   workshopSearch.addEventListener('input', () => applyWorkshopFilter(workshopSearch.value));
   newWorkshopLine.addEventListener('keydown', e => { if (e.key === 'Enter') createWorkshop(); });
-  showCreateWorkshopBtn.addEventListener('click', showCreateWorkshopForm);
-  showJoinWorkshopBtn.addEventListener('click', showJoinWorkshopForm);
   createWorkshopBtn.addEventListener('click', createWorkshop);
   backToAccountBtn.addEventListener('click', backToAccount);
   backToCalendarBtn.addEventListener('click', backToCalendar);
   logoutBtn.addEventListener('click', backToAccount);
+
+  // Переключение режимов «Мои цеха / Добавить / Создать»
+  showAddWsBtn.addEventListener('click', async () => {
+    myWsListWrap.classList.add('hidden');
+    workshopCreateWrap.classList.add('hidden');
+    addWsWrap.classList.remove('hidden');
+    membershipName.value = currentAccount.login;
+    setHint(workshopHint, '');
+    await loadWorkshops();
+  });
+  cancelAddWsBtn.addEventListener('click', () => {
+    addWsWrap.classList.add('hidden');
+    workshopCreateWrap.classList.add('hidden');
+    if (availableWorkshops.length > 0) {
+      myWsListWrap.classList.remove('hidden');
+      renderMyWsList();
+    } else {
+      addWsWrap.classList.remove('hidden');
+    }
+  });
+  showCreateWorkshopBtn.addEventListener('click', () => {
+    addWsWrap.classList.add('hidden');
+    workshopCreateWrap.classList.remove('hidden');
+    setHint(workshopHint, 'Пример: Сборка 12345 — название «Сборка», пароль «12345».');
+  });
+  showJoinWorkshopBtn.addEventListener('click', async () => {
+    workshopCreateWrap.classList.add('hidden');
+    addWsWrap.classList.remove('hidden');
+    setHint(workshopHint, '');
+    await loadWorkshops();
+  });
+  myWsSearch.addEventListener('input', renderMyWsList);
 
   switchWsBtn.addEventListener('click', openWsModal);
   wsModalClose.addEventListener('click', closeWsModal);
@@ -1682,6 +1939,27 @@
   delModalCancel.addEventListener('click', closeDelModal);
   delModalConfirm.addEventListener('click', confirmDeleteWorkshop);
   delModal.addEventListener('click', e => { if (e.target === delModal) closeDelModal(); });
+
+  // Настройка «Показывать одобренных в календаре»
+  modalSettings.addEventListener('click', () => {
+    if (!isAdmin()) return;
+    daySettings.classList.toggle('hidden');
+  });
+  setShowApproved.addEventListener('change', async (e) => {
+    if (!isAdmin()) { e.target.checked = !e.target.checked; return; }
+    const val = e.target.checked;
+    workshopSettings.showApprovedInCalendar = val;
+    applySettingsToUI();
+    renderCalendar();
+    try {
+      await update(ref(db, `workshops/${currentWorkshop.key}/settings`), {
+        showApprovedInCalendar: val
+      });
+    } catch (err) {
+      console.error(err);
+      alert('Не удалось сохранить настройку');
+    }
+  });
 
   renderCalendar();
   restoreSession();
