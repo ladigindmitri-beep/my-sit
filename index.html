@@ -681,7 +681,8 @@
         <label style="font-size: 13px; font-weight: bold; color: #1565c0;">Человек в смене:
           <input type="number" id="schPerShift" value="4" min="1" max="10" style="width: 50px; padding: 4px; border-radius: 6px; border: 1px solid #90caf9;">
         </label>
-        <button id="schCalcBtn" style="background: #4CAF50; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; margin-left: auto; display: none;">⚡ Рассчитать</button>
+        <button id="schCopyBtn" style="background: #1976d2; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; margin-left: auto; display: none;">📋 Скопировать</button>
+        <button id="schCalcBtn" style="background: #4CAF50; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; display: none;">⚡ Рассчитать</button>
       </div>
 
       <div id="schPresetWrap" style="display: flex; margin-bottom: 10px; background: #f0f0f0; padding: 8px; border-radius: 8px; align-items: center; gap: 6px; flex-wrap: wrap;">
@@ -775,7 +776,7 @@
   const delModalCancel = $('delModalCancel'), delModalConfirm = $('delModalConfirm');
 
   const scheduleBackdrop = $('scheduleBackdrop'), scheduleClose = $('scheduleClose');
-  const schGrid = $('schGrid'), schCalcBtn = $('schCalcBtn');
+  const schGrid = $('schGrid'), schCalcBtn = $('schCalcBtn'), schCopyBtn = $('schCopyBtn');
 
   const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   const today = new Date();
@@ -2066,6 +2067,7 @@
 
     const isAdm = isAdmin();
     schCalcBtn.style.display = isAdm ? 'inline-block' : 'none';
+    schCopyBtn.style.display = isAdm ? 'inline-block' : 'none';
     $('schSettings').style.display = isAdm ? 'flex' : 'none';
 
     renderScheduleGrid();
@@ -2220,6 +2222,62 @@
     }
     await update(ref(db), updates);
     renderScheduleGrid();
+  };
+
+  // === ФУНКЦИЯ КОПИРОВАНИЯ ГРАФИКА ===
+  schCopyBtn.onclick = async () => {
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const wdNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+    let text = `📅 График смен: ${monthNames[currentMonth]} ${currentYear}\n\n`;
+    let hasData = false;
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = dayKey(currentYear, currentMonth, d);
+      const users = allMarks[key] || {};
+      const approved = Object.values(users).filter(u => u.status === 'approved');
+
+      if (approved.length > 0) {
+        hasData = true;
+        const date = new Date(currentYear, currentMonth, d);
+        const wd = wdNames[date.getDay()];
+
+        // Группируем по сменам
+        const shifts = {}; 
+        approved.forEach(u => {
+          const sIdx = u.shift !== undefined ? u.shift : 0;
+          if (!shifts[sIdx]) shifts[sIdx] = [];
+          shifts[sIdx].push(u.name);
+        });
+
+        let line = `${d} (${wd}): `;
+        const shiftLines = [];
+        Object.keys(shifts).sort().forEach(sIdx => {
+          const shiftName = sIdx == 0 ? 'День' : sIdx == 1 ? 'Ночь' : 'Вечер';
+          shiftLines.push(`${shiftName} - ${shifts[sIdx].join(', ')}`);
+        });
+        line += shiftLines.join(' | ');
+        text += line + '\n';
+      }
+    }
+
+    if (!hasData) {
+      showCopyToast('Нет данных. Сначала рассчитайте график.');
+      return;
+    }
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showCopyToast('📋 График скопирован в буфер обмена!');
+    } catch (e) {
+      showCopyToast('Не удалось скопировать');
+    }
   };
 
   schCalcBtn.onclick = async () => {
