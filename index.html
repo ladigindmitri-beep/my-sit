@@ -691,6 +691,13 @@
         <button id="schCalcBtn" style="background: #4CAF50; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; margin-left: auto;">⚡ Рассчитать</button>
       </div>
 
+      <div id="schPresetWrap" style="display: none; margin-bottom: 10px; background: #f0f0f0; padding: 8px; border-radius: 8px; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <span style="font-size: 12px; font-weight: bold; color: #555;">Быстрое заполнение:</span>
+        <button id="schPreset22" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">Заполнить: 2/2</button>
+        <button id="schPreset31" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">Заполнить: 3/1</button>
+        <button id="schPresetClear" style="background: #fff; border: 1px solid #e53935; color: #c62828; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">Сбросить</button>
+      </div>
+
       <div style="font-size: 12px; color: #555; margin-bottom: 8px; line-height: 1.4;">
         Клик по ячейке меняет предпочтение: <span style="background:#fff;border:1px solid #ddd;padding:1px 4px;border-radius:4px;">Доступен</span> → 
         <span style="background:#c8e6c9;padding:1px 4px;border-radius:4px;">Хочу</span> → 
@@ -2065,6 +2072,7 @@
     const isAdm = isAdmin();
     schCalcBtn.style.display = isAdm ? 'inline-block' : 'none';
     $('schSettings').style.display = isAdm ? 'flex' : 'none';
+    $('schPresetWrap').style.display = isAdm ? 'flex' : 'none';
 
     renderScheduleGrid();
   }
@@ -2131,6 +2139,45 @@
       };
     });
   }
+
+  async function applyPreset(cycleLength, workDays) {
+    if (!isAdmin()) return;
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const updates = {};
+    
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = dayKey(currentYear, currentMonth, d);
+      const isWork = ((d - 1) % cycleLength) < workDays;
+      const state = isWork ? 'preferred' : 'vacation';
+      
+      schMembers.forEach(emp => {
+        if (!schPrefs[emp.id]) schPrefs[emp.id] = {};
+        schPrefs[emp.id][key] = state;
+        updates[`preferences/${currentWorkshop.key}/${emp.id}/${key}`] = state;
+      });
+    }
+    
+    await update(ref(db), updates);
+    renderScheduleGrid();
+  }
+
+  $('schPreset22').onclick = () => applyPreset(4, 2);
+  $('schPreset31').onclick = () => applyPreset(4, 3);
+  $('schPresetClear').onclick = async () => {
+    if (!isAdmin()) return;
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const updates = {};
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = dayKey(currentYear, currentMonth, d);
+      schMembers.forEach(emp => {
+        if (!schPrefs[emp.id]) schPrefs[emp.id] = {};
+        schPrefs[emp.id][key] = 'available';
+        updates[`preferences/${currentWorkshop.key}/${emp.id}/${key}`] = null; // remove from DB
+      });
+    }
+    await update(ref(db), updates);
+    renderScheduleGrid();
+  };
 
   schCalcBtn.onclick = async () => {
     if (!isAdmin()) return;
@@ -2257,14 +2304,24 @@
           const score = (e) => {
             let sc = 0;
             const pref = (prefs[e.id] && prefs[e.id][key]) || 'available';
-            if (pref === 'preferred') sc += 100000;
             
-            sc -= totalCount[e.id] * 5000;
-            sc -= shiftTypeCount[e.id][s] * 800;
+            // Жесткое равенство смен — приоритет
+            sc -= totalCount[e.id] * 100000;
+            
+            // Бонус за "Хочу работать"
+            if (pref === 'preferred') sc += 5000;
+            
+            // Бонус за отдых
             const daysSince = dayIdx - lastWorkedIdx[e.id];
-            sc += Math.min(daysSince, 10) * 300;
+            sc += Math.min(daysSince, 10) * 100;
+            
+            // Штраф за серию подряд
             sc -= consecutive[e.id] * 1500;
-            sc += Math.random() * 100;
+            
+            // Баланс между типами смен (день/ночь)
+            sc -= shiftTypeCount[e.id][s] * 500;
+            
+            sc += Math.random() * 10;
             return sc;
           };
 
