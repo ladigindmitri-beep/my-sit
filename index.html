@@ -437,6 +437,7 @@
   .sch-cell:hover { outline: 2px solid #4CAF50; z-index: 2; }
   .sch-emp-name { font-size: 12px; display: flex; align-items: center; gap: 4px; padding-right: 4px; overflow: hidden; }
   .sch-emp-name input { cursor: pointer; width: 16px; height: 16px; flex-shrink: 0; }
+  .sch-emp-preset { font-size: 10px; padding: 2px; max-width: 45px; border: 1px solid #ccc; border-radius: 4px; }
 
   @media (min-width: 560px) {
     .header h2 { font-size: 24px; }
@@ -691,11 +692,14 @@
         <button id="schCalcBtn" style="background: #4CAF50; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; margin-left: auto;">⚡ Рассчитать</button>
       </div>
 
-      <div id="schPresetWrap" style="display: none; margin-bottom: 10px; background: #f0f0f0; padding: 8px; border-radius: 8px; align-items: center; gap: 8px; flex-wrap: wrap;">
-        <span style="font-size: 12px; font-weight: bold; color: #555;">Быстрое заполнение:</span>
-        <button id="schPreset22" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">Заполнить: 2/2</button>
-        <button id="schPreset31" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">Заполнить: 3/1</button>
-        <button id="schPresetClear" style="background: #fff; border: 1px solid #e53935; color: #c62828; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">Сбросить</button>
+      <div id="schPresetWrap" style="display: none; margin-bottom: 10px; background: #f0f0f0; padding: 8px; border-radius: 8px; align-items: center; gap: 6px; flex-wrap: wrap;">
+        <span style="font-size: 12px; font-weight: bold; color: #555;">Все сразу:</span>
+        <button class="sch-global-preset" data-c="4" data-w="2" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">2/2</button>
+        <button class="sch-global-preset" data-c="4" data-w="3" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">3/1</button>
+        <button class="sch-global-preset" data-c="2" data-w="1" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">1/1</button>
+        <button class="sch-global-preset" data-c="3" data-w="1" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">1/2</button>
+        <button class="sch-global-preset" data-c="7" data-w="5" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">5/2</button>
+        <button id="schPresetClear" style="background: #fff; border: 1px solid #e53935; color: #c62828; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">Сбросить всех</button>
       </div>
 
       <div style="font-size: 12px; color: #555; margin-bottom: 8px; line-height: 1.4;">
@@ -2079,7 +2083,7 @@
 
   function renderScheduleGrid() {
     const days = new Date(currentYear, currentMonth + 1, 0).getDate();
-    schGrid.style.gridTemplateColumns = `140px repeat(${days}, 32px)`;
+    schGrid.style.gridTemplateColumns = `180px repeat(${days}, 32px)`;
     let html = '<div></div>';
     
     for (let d = 1; d <= days; d++) {
@@ -2092,9 +2096,17 @@
     schMembers.forEach(emp => {
       const isLocked = schLocks[emp.id] ? 'checked' : '';
       const disabled = isAdmin() ? '' : 'disabled';
-      html += `<div class="sch-emp-name" title="${escapeHtml(emp.name)}">
+      html += `<div class="sch-emp-name" title="${escapeHtml(emp.name)}" style="display: flex; gap: 4px; align-items: center; overflow: hidden;">
         <input type="checkbox" class="sch-lock" data-emp="${emp.id}" ${isLocked} ${disabled}>
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(emp.name)}</span>
+        <span style="flex: 1; overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(emp.name)}</span>
+        <select class="sch-emp-preset" data-emp="${emp.id}" style="font-size: 10px; padding: 2px; max-width: 50px;">
+          <option value="">...</option>
+          <option value="4,2">2/2</option>
+          <option value="4,3">3/1</option>
+          <option value="2,1">1/1</option>
+          <option value="3,1">1/2</option>
+          <option value="7,5">5/2</option>
+        </select>
       </div>`;
       
       for (let d = 1; d <= days; d++) {
@@ -2138,10 +2150,26 @@
         }
       };
     });
+
+    schGrid.querySelectorAll('.sch-emp-preset').forEach(sel => {
+      sel.onchange = (e) => {
+        const val = e.target.value;
+        if (!val) return;
+        const empId = sel.dataset.emp;
+        if (!isAdmin() && empId !== currentAccount.key) {
+          alert('Вы можете изменять только свои предпочтения');
+          e.target.value = '';
+          return;
+        }
+        const [w, o] = val.split(',').map(Number);
+        applyPreset(w + o, w, empId);
+        e.target.value = '';
+      };
+    });
   }
 
-  async function applyPreset(cycleLength, workDays) {
-    if (!isAdmin()) return;
+  async function applyPreset(cycleLength, workDays, empId = null) {
+    if (!isAdmin() && empId !== currentAccount.key) return;
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const updates = {};
     
@@ -2150,7 +2178,8 @@
       const isWork = ((d - 1) % cycleLength) < workDays;
       const state = isWork ? 'preferred' : 'vacation';
       
-      schMembers.forEach(emp => {
+      const targets = empId ? schMembers.filter(e => e.id === empId) : schMembers;
+      targets.forEach(emp => {
         if (!schPrefs[emp.id]) schPrefs[emp.id] = {};
         schPrefs[emp.id][key] = state;
         updates[`preferences/${currentWorkshop.key}/${emp.id}/${key}`] = state;
@@ -2161,8 +2190,14 @@
     renderScheduleGrid();
   }
 
-  $('schPreset22').onclick = () => applyPreset(4, 2);
-  $('schPreset31').onclick = () => applyPreset(4, 3);
+  document.querySelectorAll('.sch-global-preset').forEach(btn => {
+    btn.onclick = () => {
+      const c = +btn.dataset.c;
+      const w = +btn.dataset.w;
+      applyPreset(c, w, null);
+    };
+  });
+
   $('schPresetClear').onclick = async () => {
     if (!isAdmin()) return;
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -2172,7 +2207,7 @@
       schMembers.forEach(emp => {
         if (!schPrefs[emp.id]) schPrefs[emp.id] = {};
         schPrefs[emp.id][key] = 'available';
-        updates[`preferences/${currentWorkshop.key}/${emp.id}/${key}`] = null; // remove from DB
+        updates[`preferences/${currentWorkshop.key}/${emp.id}/${key}`] = null;
       });
     }
     await update(ref(db), updates);
