@@ -51,6 +51,7 @@
     border: none; border-radius: 10px; background: #ff5722; color: white; cursor: pointer;
     flex-shrink: 0; }
   .logged-bar .switch-btn { background: #1976d2; }
+  .logged-bar .schedule-btn { background: #4CAF50; }
   .logged-bar .btns { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 
   .header { display: flex; justify-content: space-between; align-items: center;
@@ -419,6 +420,24 @@
     font-size: 14px; padding: 16px 10px;
   }
 
+  /* ===== СЕТКА РАСЧЁТА ГРАФИКА ===== */
+  .sch-hdr-day { text-align: center; font-size: 11px; font-weight: bold; color: #666; padding-bottom: 2px; }
+  .sch-hdr-wd { text-align: center; font-size: 9px; color: #999; padding-bottom: 4px; text-transform: uppercase; }
+  .sch-hdr-we { color: #e74c3c !important; }
+  .sch-cell {
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #ddd; border-radius: 4px; margin: 1px;
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    min-height: 28px; transition: background 0.15s;
+  }
+  .sch-cell.available { background: #fff; }
+  .sch-cell.preferred { background: #c8e6c9; }
+  .sch-cell.unavailable { background: #ffcdd2; }
+  .sch-cell.vacation { background: #bbdefb; }
+  .sch-cell:hover { outline: 2px solid #4CAF50; z-index: 2; }
+  .sch-emp-name { font-size: 12px; display: flex; align-items: center; gap: 4px; padding-right: 4px; overflow: hidden; }
+  .sch-emp-name input { cursor: pointer; width: 16px; height: 16px; flex-shrink: 0; }
+
   @media (min-width: 560px) {
     .header h2 { font-size: 24px; }
     .header button { width: 56px; height: 56px; min-width: 56px; font-size: 30px; }
@@ -508,7 +527,6 @@
     <div class="center"><span class="step-badge">Шаг 2 — Цех</span></div>
     <h3>Вход в цех</h3>
 
-    <!-- Режим A: список доступных цехов (пароль не нужен) -->
     <div id="myWsListWrap">
       <div class="form-row" style="margin-bottom:6px;">
         <input type="text" id="myWsSearch" placeholder="🔍 Поиск по моим цехам..." autocomplete="off">
@@ -517,7 +535,6 @@
       <button class="btn-link" id="showAddWsBtn">+ Добавить ещё цех по паролю</button>
     </div>
 
-    <!-- Режим B: добавление нового цеха по паролю -->
     <div id="addWsWrap" class="hidden">
       <div class="form-row" style="margin-bottom:6px;">
         <input type="text" id="workshopSearch" placeholder="🔍 Поиск цеха..." autocomplete="off">
@@ -530,7 +547,6 @@
       <button class="btn-link" id="cancelAddWsBtn">← Назад к моим цехам</button>
     </div>
 
-    <!-- Режим C: создание нового цеха -->
     <div id="workshopCreateWrap" class="hidden">
       <div class="form-row"><input type="text" id="newWorkshopLine" placeholder="Название цеха и пароль (пример: Сборка 12345)" autocomplete="off"></div>
       <button class="btn-primary" id="createWorkshopBtn">Создать цех</button>
@@ -550,6 +566,7 @@
       <span class="my-phone hidden" id="loggedPhone"></span>
     </div>
     <div class="btns">
+      <button class="schedule-btn" id="scheduleBtn" style="display: none;">📊 График</button>
       <button class="switch-btn" id="switchWsBtn">Сменить цех</button>
       <button id="logoutBtn">Выйти</button>
     </div>
@@ -651,6 +668,44 @@
   </div>
 </div>
 
+<!-- МОДАЛКА РАСЧЁТА ГРАФИКА -->
+<div class="modal-backdrop" id="scheduleBackdrop">
+  <div class="modal" style="max-width: 1000px; height: 95vh; max-height: 95vh;">
+    <div class="modal-header">
+      <h3 id="schTitle">📅 График смен</h3>
+      <div class="date-label" id="schDateLabel">Настройки и предпочтения</div>
+      <button class="close-x" id="scheduleClose">✕</button>
+    </div>
+    <div class="modal-body" style="padding: 10px;">
+      
+      <div class="day-settings" id="schSettings" style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; background: #e3f2fd; border-color: #90caf9;">
+        <label style="font-size: 13px; font-weight: bold; color: #1565c0;">Смен в день:
+          <select id="schShiftsPerDay" style="padding: 4px; border-radius: 6px; border: 1px solid #90caf9;">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+          </select>
+        </label>
+        <label style="font-size: 13px; font-weight: bold; color: #1565c0;">Человек в смене:
+          <input type="number" id="schPerShift" value="4" min="1" max="10" style="width: 50px; padding: 4px; border-radius: 6px; border: 1px solid #90caf9;">
+        </label>
+        <button id="schCalcBtn" style="background: #4CAF50; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; margin-left: auto;">⚡ Рассчитать</button>
+      </div>
+
+      <div style="font-size: 12px; color: #555; margin-bottom: 8px; line-height: 1.4;">
+        Клик по ячейке меняет предпочтение: <span style="background:#fff;border:1px solid #ddd;padding:1px 4px;border-radius:4px;">Доступен</span> → 
+        <span style="background:#c8e6c9;padding:1px 4px;border-radius:4px;">Хочу</span> → 
+        <span style="background:#ffcdd2;padding:1px 4px;border-radius:4px;">Не могу</span> → 
+        <span style="background:#bbdefb;padding:1px 4px;border-radius:4px;">Отпуск</span>
+        <br>🔒 <strong>Приоритет</strong> — сохранить текущие смены сотрудника без изменений (только для админа).
+      </div>
+
+      <div class="grid-wrap" style="overflow-x: auto; border: 1px solid #ddd; border-radius: 8px; background: #fafafa; padding: 6px;">
+        <div id="schGrid" class="grid" style="display: grid; gap: 2px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="copy-toast" id="copyToast">Скопировано</div>
 
 <script type="module">
@@ -700,6 +755,7 @@
 
   const loggedBar = $('loggedBar'), loggedName = $('loggedName'), loggedWorkshop = $('loggedWorkshop');
   const loggedPhone = $('loggedPhone'), logoutBtn = $('logoutBtn'), switchWsBtn = $('switchWsBtn');
+  const scheduleBtn = $('scheduleBtn');
 
   const modalBackdrop = $('modalBackdrop'), modalTitle = $('modalTitle'), modalDate = $('modalDate');
   const modalBody = $('modalBody'), modalClose = $('modalClose');
@@ -718,6 +774,9 @@
   const delModal = $('delModal'), delModalName = $('delModalName');
   const delModalCancel = $('delModalCancel'), delModalConfirm = $('delModalConfirm');
 
+  const scheduleBackdrop = $('scheduleBackdrop'), scheduleClose = $('scheduleClose');
+  const schGrid = $('schGrid'), schCalcBtn = $('schCalcBtn');
+
   const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   const today = new Date();
   let currentYear = today.getFullYear(), currentMonth = today.getMonth();
@@ -727,12 +786,18 @@
   let currentMembership = null;
   let myWorkshops = [];
   let allWorkshopsList = [];
-  let availableWorkshops = []; // уже добавленные цеха этого аккаунта (userWorkshops)
+  let availableWorkshops = [];
   let allMarks = {}, msgCounts = {}, unseenByDay = {};
   let workshopSettings = { showApprovedInCalendar: true };
   let openDayKey = null;
   let pendingDeleteWs = null;
   let unsubMarks = null, unsubMsgCounts = null, unsubEvents = null, unsubModalMsgs = null, unsubSettings = null;
+
+  // Schedule state
+  let schMembers = [];
+  let schPrefs = {};
+  let schLocks = {};
+  let schCurrentMarks = {};
 
   const isCreator = () => currentWorkshop && currentAccount && currentWorkshop.createdBy === currentAccount.key;
   const isAdmin = () => {
@@ -871,6 +936,11 @@
       loggedPhone.classList.add('hidden');
       loggedPhone.onclick = null;
     }
+    
+    // Show/Hide schedule button
+    scheduleBtn.style.display = 'inline-block';
+    scheduleBtn.textContent = admin ? '📊 Управление' : '📅 График';
+
     subscribeMarks();
     subscribeMsgCounts();
     subscribeEvents();
@@ -956,7 +1026,6 @@
     } catch (e) { setHint(accHint, 'Ошибка сети', true); console.error(e); }
   }
 
-  // ===== СПИСОК ЦЕХОВ АККАУНТА (userWorkshops) =====
   async function loadAvailableWorkshops() {
     availableWorkshops = [];
     try {
@@ -1180,7 +1249,6 @@
     showLoggedIn();
   }
 
-  // ===== МОДАЛКА «МОИ ЦЕХА» (кнопка «Сменить цех») =====
   async function openWsModal() {
     wsModalList.innerHTML = '<div class="empty">Загрузка…</div>';
     wsModal.classList.add('open');
@@ -1294,7 +1362,6 @@
     showWorkshopStep(true);
   }
 
-  // ===== УДАЛЕНИЕ ЦЕХА =====
   function askDeleteWorkshop(w) {
     if (!currentAccount || w.createdBy !== currentAccount.key) {
       alert('Удалять цех может только его создатель.');
@@ -1321,7 +1388,6 @@
     delModalConfirm.disabled = true;
     delModalConfirm.textContent = 'Удаление…';
     try {
-      // Чистим userWorkshops у всех участников
       const memSnap = await get(child(ref(db), `memberships/${w.key}`));
       if (memSnap.exists()) {
         const mems = memSnap.val();
@@ -1338,6 +1404,8 @@
       await remove(ref(db, `messages/${w.key}`));
       await remove(ref(db, `dayEvents/${w.key}`));
       await remove(ref(db, `dayEventsSeen/${w.key}`));
+      await remove(ref(db, `preferences/${w.key}`));
+      await remove(ref(db, `locks/${w.key}`));
 
       const wasCurrent = currentWorkshop && currentWorkshop.key === w.key;
       closeDelModal();
@@ -1554,10 +1622,15 @@
         showEntries.slice(0, maxShow).forEach(([uid, info]) => {
           const w = document.createElement('div');
           w.className = 'who';
+          
+          let shiftPrefix = '';
+          if (info.shift === 0) shiftPrefix = 'Д ';
+          else if (info.shift === 1) shiftPrefix = 'Н ';
+          
           const nm = (info.name || '').split(/\s+/)[0];
           const pref = (info.status === 'pending' ? '⏳ ' : info.status === 'rejected' ? '✗ ' : '');
-          const txt = pref + nm;
-          w.textContent = txt.length > 9 ? txt.slice(0, 9) + '…' : txt;
+          const txt = pref + shiftPrefix + nm;
+          w.textContent = txt.length > 10 ? txt.slice(0, 10) + '…' : txt;
           namesBox.appendChild(w);
         });
         if (showEntries.length > maxShow) {
@@ -1610,8 +1683,12 @@
 
     const n = document.createElement('div');
     n.className = 'u-name';
+    let shiftLabel = '';
+    if (info.shift === 0) shiftLabel = '<span style="color:#e65100; margin-right:4px;">[День]</span>';
+    if (info.shift === 1) shiftLabel = '<span style="color:#1565c0; margin-right:4px;">[Ночь]</span>';
+    
     n.innerHTML = (info.role === 'admin' ? '<span class="crown">👑</span> ' : '') +
-      escapeHtml(info.name || '?') + (isMe ? ' (вы)' : '');
+      shiftLabel + escapeHtml(info.name || '?') + (isMe ? ' (вы)' : '');
     infoBox.appendChild(n);
 
     const ph = document.createElement('div');
@@ -1681,7 +1758,6 @@
     return li;
   }
 
-  // В модалке дня видны ВСЕ: одобренные, pending, rejected.
   function renderModalLists() {
     if (!openDayKey) return;
     const users = allMarks[openDayKey] || {};
@@ -1690,7 +1766,6 @@
     const pending  = entries.filter(([, u]) => u.status === 'pending');
     const rejected = entries.filter(([, u]) => u.status === 'rejected');
 
-    // Одобренные
     listApproved.innerHTML = '';
     if (approved.length === 0) {
       const li = document.createElement('li'); li.className = 'empty';
@@ -1703,7 +1778,6 @@
     secApproved.style.display = '';
     cntApproved.textContent = approved.length;
 
-    // Заявки — видны всем, кнопки только админу
     if (pending.length > 0) {
       listPending.innerHTML = '';
       pending.forEach(([uid, info]) =>
@@ -1715,7 +1789,6 @@
       cntPending.textContent = pending.length;
     } else secPending.style.display = 'none';
 
-    // Отклонённые — видны всем, «Вернуть» только админу
     if (rejected.length > 0) {
       listRejected.innerHTML = '';
       rejected.forEach(([uid, info]) =>
@@ -1762,7 +1835,6 @@
     msgInput.value = '';
     msgSend.disabled = !currentAccount;
 
-    // Настройки — только админ
     modalSettings.style.display = isAdmin() ? 'flex' : 'none';
     daySettings.classList.add('hidden');
     setShowApproved.checked = workshopSettings.showApprovedInCalendar;
@@ -1897,7 +1969,6 @@
   backToCalendarBtn.addEventListener('click', backToCalendar);
   logoutBtn.addEventListener('click', backToAccount);
 
-  // Переключение режимов «Мои цеха / Добавить / Создать»
   showAddWsBtn.addEventListener('click', async () => {
     myWsListWrap.classList.add('hidden');
     workshopCreateWrap.classList.add('hidden');
@@ -1940,7 +2011,6 @@
   delModalConfirm.addEventListener('click', confirmDeleteWorkshop);
   delModal.addEventListener('click', e => { if (e.target === delModal) closeDelModal(); });
 
-  // Настройка «Показывать одобренных в календаре»
   modalSettings.addEventListener('click', () => {
     if (!isAdmin()) return;
     daySettings.classList.toggle('hidden');
@@ -1960,6 +2030,280 @@
       alert('Не удалось сохранить настройку');
     }
   });
+
+  /* ====== ЛОГИКА РАСЧЁТА ГРАФИКА ====== */
+  scheduleBtn.addEventListener('click', openScheduleModal);
+  scheduleClose.addEventListener('click', () => scheduleBackdrop.classList.remove('open'));
+  scheduleBackdrop.addEventListener('click', e => { if (e.target === scheduleBackdrop) scheduleBackdrop.classList.remove('open'); });
+
+  async function openScheduleModal() {
+    schPrefs = {}; schLocks = {}; schCurrentMarks = {};
+    scheduleBackdrop.classList.add('open');
+    
+    const memSnap = await get(child(ref(db), `memberships/${currentWorkshop.key}`));
+    if (memSnap.exists()) {
+      const mems = memSnap.val();
+      schMembers = Object.keys(mems).map(k => ({ id: k, name: mems[k].name }));
+    } else { return; }
+
+    const prefSnap = await get(child(ref(db), `preferences/${currentWorkshop.key}`));
+    schPrefs = prefSnap.exists() ? prefSnap.val() : {};
+
+    const lockSnap = await get(child(ref(db), `locks/${currentWorkshop.key}`));
+    schLocks = lockSnap.exists() ? lockSnap.val() : {};
+
+    const cfgSnap = await get(child(ref(db), `workshops/${currentWorkshop.key}/scheduleConfig`));
+    if (cfgSnap.exists()) {
+      const cfg = cfgSnap.val();
+      $('schShiftsPerDay').value = cfg.shiftsPerDay || 2;
+      $('schPerShift').value = cfg.perShift || 4;
+    }
+
+    const markSnap = await get(child(ref(db), `marks/${currentWorkshop.key}`));
+    schCurrentMarks = markSnap.exists() ? markSnap.val() : {};
+
+    const isAdm = isAdmin();
+    schCalcBtn.style.display = isAdm ? 'inline-block' : 'none';
+    $('schSettings').style.display = isAdm ? 'flex' : 'none';
+
+    renderScheduleGrid();
+  }
+
+  function renderScheduleGrid() {
+    const days = new Date(currentYear, currentMonth + 1, 0).getDate();
+    schGrid.style.gridTemplateColumns = `140px repeat(${days}, 32px)`;
+    let html = '<div></div>';
+    
+    for (let d = 1; d <= days; d++) {
+      const date = new Date(currentYear, currentMonth, d);
+      const wd = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][date.getDay()];
+      const isWe = date.getDay() === 0 || date.getDay() === 6;
+      html += `<div class="sch-hdr-day sch-hdr-we ${isWe?'sch-hdr-we':''}" style="color:${isWe?'#e74c3c':'#666'}">${d}</div>`;
+    }
+    
+    schMembers.forEach(emp => {
+      const isLocked = schLocks[emp.id] ? 'checked' : '';
+      const disabled = isAdmin() ? '' : 'disabled';
+      html += `<div class="sch-emp-name" title="${escapeHtml(emp.name)}">
+        <input type="checkbox" class="sch-lock" data-emp="${emp.id}" ${isLocked} ${disabled}>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(emp.name)}</span>
+      </div>`;
+      
+      for (let d = 1; d <= days; d++) {
+        const key = dayKey(currentYear, currentMonth, d);
+        const p = (schPrefs[emp.id] && schPrefs[emp.id][key]) || 'available';
+        html += `<div class="sch-cell ${p}" data-emp="${emp.id}" data-day="${key}"></div>`;
+      }
+    });
+    schGrid.innerHTML = html;
+
+    schGrid.querySelectorAll('.sch-cell').forEach(cell => {
+      cell.onclick = async () => {
+        const empId = cell.dataset.emp;
+        if (!isAdmin() && empId !== currentAccount.key) {
+           alert('Вы можете изменять только свои предпочтения');
+           return;
+        }
+        const key = cell.dataset.day;
+        const cur = (schPrefs[empId] && schPrefs[empId][key]) || 'available';
+        const states = ['available', 'preferred', 'unavailable', 'vacation'];
+        const next = states[(states.indexOf(cur) + 1) % states.length];
+        
+        if (!schPrefs[empId]) schPrefs[empId] = {};
+        schPrefs[empId][key] = next;
+        cell.className = `sch-cell ${next}`;
+        
+        await set(ref(db, `preferences/${currentWorkshop.key}/${empId}/${key}`), next);
+      };
+    });
+
+    schGrid.querySelectorAll('.sch-lock').forEach(cb => {
+      cb.onchange = async (e) => {
+        if (!isAdmin()) return;
+        const empId = cb.dataset.emp;
+        const val = e.target.checked;
+        schLocks[empId] = val;
+        if (val) {
+          await set(ref(db, `locks/${currentWorkshop.key}/${empId}`), true);
+        } else {
+          await remove(ref(db, `locks/${currentWorkshop.key}/${empId}`));
+        }
+      };
+    });
+  }
+
+  schCalcBtn.onclick = async () => {
+    if (!isAdmin()) return;
+    schCalcBtn.disabled = true;
+    schCalcBtn.textContent = 'Расчёт...';
+    
+    const S = +$('schShiftsPerDay').value;
+    const P = +$('schPerShift').value;
+    
+    await set(ref(db, `workshops/${currentWorkshop.key}/scheduleConfig`), {
+      shiftsPerDay: S,
+      perShift: P
+    });
+
+    const generated = calculateScheduleLogic(schMembers, schPrefs, schCurrentMarks, S, P, schLocks);
+    
+    const updates = {};
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = dayKey(currentYear, currentMonth, d);
+      schMembers.forEach(emp => {
+        updates[`marks/${currentWorkshop.key}/${key}/${emp.id}`] = null;
+      });
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = dayKey(currentYear, currentMonth, d);
+      const dayRes = generated[key];
+      if (!dayRes) continue;
+      
+      dayRes.shifts.forEach((ids, sIdx) => {
+        ids.forEach(id => {
+          const emp = schMembers.find(x => x.id === id);
+          if (emp) {
+            updates[`marks/${currentWorkshop.key}/${key}/${id}`] = {
+              name: emp.name,
+              status: 'approved',
+              shift: sIdx,
+              updatedAt: Date.now(),
+              phone: '', 
+              maxUsername: ''
+            };
+          }
+        });
+      });
+    }
+
+    await update(ref(db), updates);
+    
+    schCalcBtn.disabled = false;
+    schCalcBtn.textContent = '⚡ Рассчитать';
+    scheduleBackdrop.classList.remove('open');
+    alert('График успешно рассчитан и сохранён!');
+  };
+
+  function calculateScheduleLogic(emps, prefs, existingMarks, S, P, lockedEmpIds) {
+    const days = [];
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(currentYear, currentMonth, i));
+    }
+
+    const totalCount = {};
+    const shiftTypeCount = {};
+    const lastWorkedIdx = {};
+    const consecutive = {};
+
+    emps.forEach(e => {
+      totalCount[e.id] = 0;
+      shiftTypeCount[e.id] = Array(S).fill(0);
+      lastWorkedIdx[e.id] = -100;
+      consecutive[e.id] = 0;
+    });
+
+    const result = {};
+    
+    days.forEach((date, dayIdx) => {
+      const key = dayKey(date.getFullYear(), date.getMonth(), date.getDate());
+      const todayAssigned = new Set();
+      const forcedOff = new Set();
+      const shifts = Array.from({length: S}, () => []);
+      
+      if (existingMarks && existingMarks[key]) {
+        emps.forEach(e => {
+          if (!lockedEmpIds[e.id]) return; 
+          
+          const mark = existingMarks[key][e.id];
+          if (!mark || mark.status !== 'approved') { forcedOff.add(e.id); return; }
+          
+          const oldShiftIdx = mark.shift;
+          if (oldShiftIdx !== undefined && oldShiftIdx !== null) {
+            if (oldShiftIdx < S && shifts[oldShiftIdx].length < P) {
+              shifts[oldShiftIdx].push(e.id);
+              todayAssigned.add(e.id);
+            } else {
+              let placed = false;
+              for (let s = 0; s < S; s++) {
+                if (shifts[s].length < P) {
+                  shifts[s].push(e.id);
+                  todayAssigned.add(e.id);
+                  placed = true;
+                  break;
+                }
+              }
+              if (!placed) forcedOff.add(e.id);
+            }
+          } else {
+             forcedOff.add(e.id);
+          }
+        });
+      }
+
+      for (let s = 0; s < S; s++) {
+        while (shifts[s].length < P) {
+          const candidates = emps.filter(e => {
+            if (todayAssigned.has(e.id)) return false;
+            if (forcedOff.has(e.id)) return false;
+            const pref = (prefs[e.id] && prefs[e.id][key]) || 'available';
+            return pref !== 'unavailable' && pref !== 'vacation';
+          });
+          if (candidates.length === 0) break;
+
+          const score = (e) => {
+            let sc = 0;
+            const pref = (prefs[e.id] && prefs[e.id][key]) || 'available';
+            if (pref === 'preferred') sc += 100000;
+            
+            sc -= totalCount[e.id] * 5000;
+            sc -= shiftTypeCount[e.id][s] * 800;
+            const daysSince = dayIdx - lastWorkedIdx[e.id];
+            sc += Math.min(daysSince, 10) * 300;
+            sc -= consecutive[e.id] * 1500;
+            sc += Math.random() * 100;
+            return sc;
+          };
+
+          const wantGroup = candidates
+            .filter(e => ((prefs[e.id] && prefs[e.id][key]) || 'available') === 'preferred')
+            .map(e => ({ e, sc: score(e) }))
+            .sort((a, b) => b.sc - a.sc);
+          const availGroup = candidates
+            .filter(e => ((prefs[e.id] && prefs[e.id][key]) || 'available') === 'available')
+            .map(e => ({ e, sc: score(e) }))
+            .sort((a, b) => b.sc - a.sc);
+
+          const best = [...wantGroup, ...availGroup][0];
+          if (!best) break;
+          shifts[s].push(best.e.id);
+          todayAssigned.add(best.e.id);
+        }
+      }
+
+      shifts.forEach((ids, s) => {
+        ids.forEach(id => {
+          totalCount[id]++;
+          shiftTypeCount[id][s]++;
+        });
+      });
+      emps.forEach(e => {
+        if (todayAssigned.has(e.id)) {
+          lastWorkedIdx[e.id] = dayIdx;
+          consecutive[e.id]++;
+        } else {
+          consecutive[e.id] = 0;
+        }
+      });
+
+      result[key] = { shifts };
+    });
+
+    return result;
+  }
 
   renderCalendar();
   restoreSession();
