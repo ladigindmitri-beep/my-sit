@@ -185,7 +185,6 @@
   .days .day .chat-btn.has-msg { background: #1976d2; color: #fff; box-shadow: 0 2px 4px rgba(25,118,210,0.4); }
   .days .day .chat-btn .badge { font-size: 11px; font-weight: 900; }
 
-  /* Скрытие одобренных в календаре (настройка админа) */
   .days.hide-approved .day .people-count { display: none !important; }
   .days.hide-approved .day .names { display: none !important; }
   .days.hide-approved .day .dots .dot:not(.pending):not(.rejected) { display: none !important; }
@@ -427,8 +426,8 @@
   .sch-cell {
     display: flex; align-items: center; justify-content: center;
     border: 1px solid #ddd; border-radius: 4px; margin: 1px;
-    font-size: 11px; font-weight: 600; cursor: pointer;
-    min-height: 28px; transition: background 0.15s;
+    font-size: 14px; cursor: pointer;
+    min-height: 32px; transition: background 0.15s;
   }
   .sch-cell.available { background: #fff; }
   .sch-cell.preferred { background: #c8e6c9; }
@@ -510,7 +509,6 @@
 <div class="calendar locked" id="calendar">
   <div id="loadingBlock" class="loading">Загрузка…</div>
 
-  <!-- ШАГ 1: АККАУНТ -->
   <div class="auth hidden" id="accountBlock">
     <div class="center"><span class="step-badge">Шаг 1 — Аккаунт</span></div>
     <h3 id="accountTitle">Вход в аккаунт</h3>
@@ -523,7 +521,6 @@
     <div class="hint" id="accHint"></div>
   </div>
 
-  <!-- ШАГ 2: ЦЕХ -->
   <div class="auth hidden" id="workshopBlock">
     <div class="center"><span class="step-badge">Шаг 2 — Цех</span></div>
     <h3>Вход в цех</h3>
@@ -559,7 +556,6 @@
     <div class="hint" id="workshopHint"></div>
   </div>
 
-  <!-- ПАНЕЛЬ ВОШЕДШЕГО -->
   <div class="logged-bar hidden" id="loggedBar">
     <div class="info">
       <span class="name" id="loggedName">—</span>
@@ -585,7 +581,6 @@
   <div class="hint-bottom">💬 — сообщения. + / − — заявка на смену. Кнопка «Сменить цех» — переход между цехами.</div>
 </div>
 
-<!-- МОДАЛКА ДНЯ -->
 <div class="modal-backdrop" id="modalBackdrop">
   <div class="modal">
     <div class="modal-header">
@@ -626,7 +621,6 @@
   </div>
 </div>
 
-<!-- МОДАЛКА «МОИ ЦЕХА» -->
 <div class="ws-modal" id="wsModal">
   <div class="box">
     <div class="head">
@@ -644,7 +638,6 @@
   </div>
 </div>
 
-<!-- МОДАЛКА ПОДТВЕРЖДЕНИЯ УДАЛЕНИЯ -->
 <div class="del-modal" id="delModal">
   <div class="box">
     <div class="top">
@@ -669,7 +662,6 @@
   </div>
 </div>
 
-<!-- МОДАЛКА РАСЧЁТА ГРАФИКА -->
 <div class="modal-backdrop" id="scheduleBackdrop">
   <div class="modal" style="max-width: 1000px; height: 95vh; max-height: 95vh;">
     <div class="modal-header">
@@ -702,11 +694,8 @@
         <button id="schPresetClear" style="background: #fff; border: 1px solid #e53935; color: #c62828; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">Сбросить всех</button>
       </div>
 
-      <div style="font-size: 12px; color: #555; margin-bottom: 8px; line-height: 1.4;">
-        Клик по ячейке меняет предпочтение: <span style="background:#fff;border:1px solid #ddd;padding:1px 4px;border-radius:4px;">Доступен</span> → 
-        <span style="background:#c8e6c9;padding:1px 4px;border-radius:4px;">Хочу</span> → 
-        <span style="background:#ffcdd2;padding:1px 4px;border-radius:4px;">Не могу</span> → 
-        <span style="background:#bbdefb;padding:1px 4px;border-radius:4px;">Отпуск</span>
+      <div style="font-size: 13px; color: #555; margin-bottom: 8px; line-height: 1.4;">
+        Клик по ячейке меняет предпочтение: <span style="color: #666;">⚪ Доступен</span> → <span style="color: #2e7d32;">✅ Хочу</span> → <span style="color: #c62828;">❌ Не могу</span> → <span style="color: #1565c0;">🏖️ Отпуск</span>
         <br>🔒 <strong>Приоритет</strong> — сохранить текущие смены сотрудника без изменений (только для админа).
       </div>
 
@@ -823,6 +812,9 @@
   const digitsOnly = s => (s || '').replace(/\D/g, '');
   const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const formatTime = ts => { if (!ts) return ''; const d = new Date(ts); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); };
+
+  // Символы для графика
+  const SCH_SYMBOLS = { available: '⚪', preferred: '✅', unavailable: '❌', vacation: '🏖️' };
 
   async function sha256(text) {
     const data = new TextEncoder().encode(text);
@@ -948,7 +940,6 @@
       loggedPhone.onclick = null;
     }
     
-    // Show/Hide schedule button
     scheduleBtn.style.display = 'inline-block';
     scheduleBtn.textContent = admin ? '📊 Управление' : '📅 График';
 
@@ -2082,14 +2073,20 @@
 
   function renderScheduleGrid() {
     const days = new Date(currentYear, currentMonth + 1, 0).getDate();
-    schGrid.style.gridTemplateColumns = `180px repeat(${days}, 32px)`;
+    // Увеличили первую колонку до 200px для аккуратного размещения элементов
+    schGrid.style.gridTemplateColumns = `200px repeat(${days}, 34px)`;
     let html = '<div></div>';
     
+    const wdNames = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
     for (let d = 1; d <= days; d++) {
       const date = new Date(currentYear, currentMonth, d);
-      const wd = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][date.getDay()];
+      const wd = wdNames[date.getDay()];
       const isWe = date.getDay() === 0 || date.getDay() === 6;
-      html += `<div class="sch-hdr-day sch-hdr-we ${isWe?'sch-hdr-we':''}" style="color:${isWe?'#e74c3c':'#666'}">${d}</div>`;
+      // В шапку добавляем число и день недели
+      html += `<div class="sch-hdr-day ${isWe?'sch-hdr-we':''}">
+        <div style="font-size: 12px; font-weight: bold; line-height: 1.1;">${d}</div>
+        <div class="sch-hdr-wd" style="color: ${isWe?'#e74c3c':'#999'};">${wd}</div>
+      </div>`;
     }
     
     schMembers.forEach(emp => {
@@ -2098,7 +2095,7 @@
       html += `<div class="sch-emp-name" title="${escapeHtml(emp.name)}">
         <input type="checkbox" class="sch-lock" data-emp="${emp.id}" ${isLocked} ${disabled} style="width:16px; height:16px; margin:0; flex-shrink:0;">
         <span style="flex: 1; overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(emp.name)}</span>
-        <select class="sch-emp-preset" data-emp="${emp.id}" style="font-size: 10px; padding: 2px; max-width: 50px; flex-shrink:0;">
+        <select class="sch-emp-preset" data-emp="${emp.id}" style="font-size: 11px; padding: 2px; max-width: 55px; flex-shrink:0;">
           <option value="">...</option>
           <option value="4,2">2/2</option>
           <option value="4,3">3/1</option>
@@ -2111,7 +2108,8 @@
       for (let d = 1; d <= days; d++) {
         const key = dayKey(currentYear, currentMonth, d);
         const p = (schPrefs[emp.id] && schPrefs[emp.id][key]) || 'available';
-        html += `<div class="sch-cell ${p}" data-emp="${emp.id}" data-day="${key}"></div>`;
+        // Вставляем символ в ячейку
+        html += `<div class="sch-cell ${p}" data-emp="${emp.id}" data-day="${key}">${SCH_SYMBOLS[p]}</div>`;
       }
     });
     schGrid.innerHTML = html;
@@ -2131,6 +2129,7 @@
         if (!schPrefs[empId]) schPrefs[empId] = {};
         schPrefs[empId][key] = next;
         cell.className = `sch-cell ${next}`;
+        cell.textContent = SCH_SYMBOLS[next]; // Обновляем символ
         
         await set(ref(db, `preferences/${currentWorkshop.key}/${empId}/${key}`), next);
       };
@@ -2186,7 +2185,7 @@
     }
     
     await update(ref(db), updates);
-    renderScheduleGrid();
+    renderScheduleGrid(); // Перерисовываем, чтобы появились символы
   }
 
   document.querySelectorAll('.sch-global-preset').forEach(btn => {
