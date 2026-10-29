@@ -437,7 +437,7 @@
   .sch-cell:hover { outline: 2px solid #4CAF50; z-index: 2; }
   .sch-emp-name { font-size: 12px; display: flex; align-items: center; gap: 4px; padding-right: 4px; overflow: hidden; }
   .sch-emp-name input { cursor: pointer; width: 16px; height: 16px; flex-shrink: 0; }
-  .sch-emp-preset { font-size: 10px; padding: 2px; max-width: 45px; border: 1px solid #ccc; border-radius: 4px; }
+  .sch-emp-preset { font-size: 11px; padding: 2px; max-width: 60px; border: 1px solid #ccc; border-radius: 4px; flex-shrink: 0; }
 
   @media (min-width: 560px) {
     .header h2 { font-size: 24px; }
@@ -689,11 +689,11 @@
         <label style="font-size: 13px; font-weight: bold; color: #1565c0;">Человек в смене:
           <input type="number" id="schPerShift" value="4" min="1" max="10" style="width: 50px; padding: 4px; border-radius: 6px; border: 1px solid #90caf9;">
         </label>
-        <button id="schCalcBtn" style="background: #4CAF50; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; margin-left: auto;">⚡ Рассчитать</button>
+        <button id="schCalcBtn" style="background: #4CAF50; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; margin-left: auto; display: none;">⚡ Рассчитать</button>
       </div>
 
-      <div id="schPresetWrap" style="display: none; margin-bottom: 10px; background: #f0f0f0; padding: 8px; border-radius: 8px; align-items: center; gap: 6px; flex-wrap: wrap;">
-        <span style="font-size: 12px; font-weight: bold; color: #555;">Все сразу:</span>
+      <div id="schPresetWrap" style="display: flex; margin-bottom: 10px; background: #f0f0f0; padding: 8px; border-radius: 8px; align-items: center; gap: 6px; flex-wrap: wrap;">
+        <span style="font-size: 12px; font-weight: bold; color: #555;">Быстрое заполнение:</span>
         <button class="sch-global-preset" data-c="4" data-w="2" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">2/2</button>
         <button class="sch-global-preset" data-c="4" data-w="3" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">3/1</button>
         <button class="sch-global-preset" data-c="2" data-w="1" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">1/1</button>
@@ -2060,7 +2060,7 @@
     const prefSnap = await get(child(ref(db), `preferences/${currentWorkshop.key}`));
     schPrefs = prefSnap.exists() ? prefSnap.val() : {};
 
-    const lockSnap = await get(child(ref(db), `locks/${currentWorkshop.key}`));
+    const lockSnap = await get(ref(db, `locks/${currentWorkshop.key}`));
     schLocks = lockSnap.exists() ? lockSnap.val() : {};
 
     const cfgSnap = await get(child(ref(db), `workshops/${currentWorkshop.key}/scheduleConfig`));
@@ -2076,7 +2076,6 @@
     const isAdm = isAdmin();
     schCalcBtn.style.display = isAdm ? 'inline-block' : 'none';
     $('schSettings').style.display = isAdm ? 'flex' : 'none';
-    $('schPresetWrap').style.display = isAdm ? 'flex' : 'none';
 
     renderScheduleGrid();
   }
@@ -2096,10 +2095,10 @@
     schMembers.forEach(emp => {
       const isLocked = schLocks[emp.id] ? 'checked' : '';
       const disabled = isAdmin() ? '' : 'disabled';
-      html += `<div class="sch-emp-name" title="${escapeHtml(emp.name)}" style="display: flex; gap: 4px; align-items: center; overflow: hidden;">
-        <input type="checkbox" class="sch-lock" data-emp="${emp.id}" ${isLocked} ${disabled}>
+      html += `<div class="sch-emp-name" title="${escapeHtml(emp.name)}">
+        <input type="checkbox" class="sch-lock" data-emp="${emp.id}" ${isLocked} ${disabled} style="width:16px; height:16px; margin:0; flex-shrink:0;">
         <span style="flex: 1; overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(emp.name)}</span>
-        <select class="sch-emp-preset" data-emp="${emp.id}" style="font-size: 10px; padding: 2px; max-width: 50px;">
+        <select class="sch-emp-preset" data-emp="${emp.id}" style="font-size: 10px; padding: 2px; max-width: 50px; flex-shrink:0;">
           <option value="">...</option>
           <option value="4,2">2/2</option>
           <option value="4,3">3/1</option>
@@ -2152,7 +2151,7 @@
     });
 
     schGrid.querySelectorAll('.sch-emp-preset').forEach(sel => {
-      sel.onchange = (e) => {
+      sel.onchange = async (e) => {
         const val = e.target.value;
         if (!val) return;
         const empId = sel.dataset.emp;
@@ -2161,8 +2160,8 @@
           e.target.value = '';
           return;
         }
-        const [w, o] = val.split(',').map(Number);
-        applyPreset(w + o, w, empId);
+        const [c, w] = val.split(',').map(Number);
+        applyPreset(c, w, empId);
         e.target.value = '';
       };
     });
@@ -2191,20 +2190,30 @@
   }
 
   document.querySelectorAll('.sch-global-preset').forEach(btn => {
-    btn.onclick = () => {
+    btn.onclick = async () => {
       const c = +btn.dataset.c;
       const w = +btn.dataset.w;
-      applyPreset(c, w, null);
+      if (!isAdmin()) {
+        if (!confirm('Применить этот график только для себя?')) return;
+        applyPreset(c, w, currentAccount.key);
+      } else {
+        applyPreset(c, w, null);
+      }
     };
   });
 
   $('schPresetClear').onclick = async () => {
-    if (!isAdmin()) return;
+    if (!isAdmin()) {
+      if (!confirm('Сбросить свой график?')) return;
+    } else {
+      if (!confirm('Сбросить график всех сотрудников?')) return;
+    }
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const updates = {};
     for (let d = 1; d <= daysInMonth; d++) {
       const key = dayKey(currentYear, currentMonth, d);
-      schMembers.forEach(emp => {
+      const targets = isAdmin() ? schMembers : schMembers.filter(e => e.id === currentAccount.key);
+      targets.forEach(emp => {
         if (!schPrefs[emp.id]) schPrefs[emp.id] = {};
         schPrefs[emp.id][key] = 'available';
         updates[`preferences/${currentWorkshop.key}/${emp.id}/${key}`] = null;
