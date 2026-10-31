@@ -1,2470 +1,864 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#4CAF50">
-<title>Календарь цеха</title>
-<style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; padding: 0; min-height: 100%;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    background: #f0f0f0; overflow-x: hidden; }
-  body { display: flex; justify-content: center; align-items: flex-start; padding: 10px;
-    padding-top: max(10px, env(safe-area-inset-top));
-    padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-  .calendar { background: #fff; border-radius: 20px; box-shadow: 0 6px 24px rgba(0,0,0,0.15);
-    padding: 16px; width: 100%; max-width: 100%; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Экосистема: Цеха и Графики</title>
+    <style>
+        /* ================= ОБЩИЕ СТИЛИ ================= */
+        :root { --primary: #3498db; --primary-hover: #2980b9; --success: #2ecc71; --danger: #e74c3c; --warning: #f39c12; --bg: #eef1f5; --card: #fff; --text: #2c3e50; --border: #dcdfe3; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 12px; min-height: 100vh; }
+        
+        .screen { display: none; }
+        .screen.active { display: block; }
 
-  .auth h3 { margin: 4px 0 12px; font-size: 18px; color: #222; text-align: center; }
-  .auth .form-row { display: flex; gap: 8px; margin-bottom: 10px; }
-  .auth .form-row input { flex: 1; padding: 14px; font-size: 18px;
-    border: 2px solid #ddd; border-radius: 12px; outline: none; min-width: 0; }
-  .auth .form-row input:focus { border-color: #4CAF50; }
-  .auth .btn-primary { width: 100%; padding: 14px; font-size: 18px; font-weight: 700;
-    border: none; border-radius: 12px; background: #4CAF50; color: white; cursor: pointer; margin-bottom: 8px; }
-  .auth .btn-primary:active { background: #388e3c; }
-  .auth .btn-secondary { width: 100%; padding: 12px; margin-top: 8px; font-size: 16px; font-weight: 700;
-    border: 2px solid #4CAF50; border-radius: 12px; background: white; color: #2e7d32; cursor: pointer; }
-  .auth .btn-link { width: 100%; padding: 8px; background: none; border: none;
-    color: #1976d2; font-size: 14px; cursor: pointer; text-decoration: underline; }
-  .auth .hint { font-size: 13px; color: #888; text-align: center; margin-top: 8px; min-height: 16px; }
-  .auth .hint.error { color: #d32f2f; font-weight: 600; }
-  .auth select { width: 100%; padding: 14px; font-size: 18px; border: 2px solid #ddd;
-    border-radius: 12px; outline: none; background: white; margin-bottom: 10px; }
-  .auth select:focus { border-color: #4CAF50; }
+        /* ================= ЭКРАНЫ АВТОРИЗАЦИИ ================= */
+        .auth-box { background: var(--card); width: 100%; max-width: 400px; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin: 40px auto; }
+        .auth-box h2 { text-align: center; margin-bottom: 20px; font-size: 22px; }
+        .auth-box input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; outline: none; }
+        .auth-box input:focus { border-color: var(--primary); }
+        .auth-box button { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 10px; transition: 0.2s; }
+        .auth-box button:hover { background: var(--primary-hover); }
+        .auth-box button.secondary { background: #ecf0f1; color: #333; }
+        .auth-box button.secondary:hover { background: #dfe6e9; }
+        
+        .tabs { display: flex; margin-bottom: 20px; background: #f8f9fa; border-radius: 8px; padding: 4px; }
+        .tab { flex: 1; padding: 10px; text-align: center; border: none; background: transparent; color: #666; font-weight: 600; border-radius: 6px; cursor: pointer; }
+        .tab.active { background: #fff; color: var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .error { color: var(--danger); font-size: 13px; margin-bottom: 10px; text-align: center; display: none; }
+        
+        .workshop-item { padding: 12px; background: #f8f9fa; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: 0.2s; }
+        .workshop-item:hover { background: #e3f2fd; border-color: var(--primary); }
+        .info { font-size: 13px; color: #666; margin-bottom: 15px; text-align: center; }
 
-  .logged-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px;
-    margin-bottom: 14px; padding: 10px 12px; background: #e8f5e9; border-radius: 12px; }
-  .logged-bar.admin { background: #fff8e1; border: 1px solid #ffe082; }
-  .logged-bar .info { display: flex; flex-direction: column; overflow: hidden; min-width: 0; flex: 1; }
-  .logged-bar .name { font-size: 16px; color: #1b5e20; font-weight: 700;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .logged-bar.admin .name { color: #8d6e00; }
-  .logged-bar .ws { font-size: 12px; color: #558b2f;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .logged-bar.admin .ws { color: #9e7a00; }
-  .logged-bar .my-phone { font-size: 12px; color: #1b5e20; font-weight: 700; margin-top: 2px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .logged-bar.admin .my-phone { color: #8d6e00; }
-  .logged-bar button { padding: 8px 12px; font-size: 14px; font-weight: 700;
-    border: none; border-radius: 10px; background: #ff5722; color: white; cursor: pointer;
-    flex-shrink: 0; }
-  .logged-bar .switch-btn { background: #1976d2; }
-  .logged-bar .schedule-btn { background: #4CAF50; }
-  .logged-bar .btns { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+        /* ================= ГЛАВНЫЙ ЭКРАН (ГРАФИК) ================= */
+        .container { max-width: 1200px; margin: 0 auto; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); flex-wrap: wrap; gap: 10px; }
+        header h1 { font-size: 18px; }
+        header .user-info { font-size: 14px; color: #666; }
+        header button { padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; background: #ecf0f1; transition: 0.2s; }
+        header button:hover { background: #dfe6e9; }
+        header button.btn-danger { background: #ffeaa7; color: #d63031; border: 1px solid #fdcb6e; }
+        header button.btn-danger:hover { background: #fdcb6e; }
 
-  .header { display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 12px; gap: 8px; }
-  .header h2 { margin: 0; font-size: 22px; font-weight: 700; text-align: center;
-    flex: 1; color: #222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .header button { background: #4CAF50; border: none; color: white; font-size: 26px;
-    width: 48px; height: 48px; min-width: 48px; border-radius: 50%; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; padding: 0;
-    line-height: 1; font-weight: 700; flex-shrink: 0; }
-  .header button:active { background: #388e3c; }
+        .panel { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .panel h3 { font-size: 14px; margin-bottom: 10px; color: #555; text-transform: uppercase; }
+        .btn-primary { padding: 10px 16px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-success { padding: 8px 12px; background: var(--success); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 13px; }
+        .btn-success:hover { background: #27ae60; }
 
-  .weekdays, .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; }
-  .weekdays div { text-align: center; font-weight: 700; color: #666;
-    font-size: 14px; padding: 6px 0; user-select: none; }
-  .days-wrap { padding: 0 12px 12px; margin: 0 -12px; }
+        .grid-wrap { overflow-x: auto; border-radius: 8px; background: #fff; padding: 6px; border: 1px solid #ecf0f1; }
+        .grid { display: grid; gap: 2px; min-width: max-content; }
+        .grid-hdr { font-size: 10px; font-weight: 600; text-align: center; padding: 3px 0; color: #999; border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 34px; }
+        .grid-hdr .gh-day { font-size: 12px; font-weight: 700; color: #555; }
+        .grid-hdr .gh-wd { font-size: 9px; color: #aaa; text-transform: uppercase; }
+        .grid-hdr.we .gh-day, .grid-hdr.we .gh-wd { color: #e74c3c; }
+        .grid-hdr.today { background: #3498db; }
+        .grid-hdr.today .gh-day, .grid-hdr.today .gh-wd { color: #fff; }
 
-  .days .day {
-    position: relative;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    min-height: 96px;
-    border-radius: 12px;
-    cursor: pointer; user-select: none;
-    background: #f5f5f5; color: #222;
-    padding: 30px 6px 30px;
-    overflow: visible;
-    transition: background 0.15s;
-    z-index: 1;
-  }
-  .days .day.empty { background: transparent; pointer-events: none; }
-  .days .day.today { border: 2px solid #4CAF50; }
-  .days .day.has-users { background: #c8e6c9; color: #1b5e20; }
-  .days .day.has-pending { background: #fff3cd; color: #856404; }
-  .days .day.mine { background: #4CAF50; color: white; }
-  .days .day.mine-pending { background: #ffc107; color: #5d4200; }
-  .days .day.unseen-flash { animation: unseenFlash 1s ease-in-out infinite; }
-  @keyframes unseenFlash {
-    0%, 100% { box-shadow: inset 0 0 0 3px #e53935; }
-    50%      { box-shadow: inset 0 0 0 3px rgba(229,57,53,0.15); }
-  }
+        .grid-name { font-size: 12px; padding: 4px 8px; background: #f8f9fa; border-left: 4px solid transparent; display: flex; align-items: center; white-space: nowrap; border-radius: 3px; font-weight: 600; }
+        .grid-name.dummy { color: #95a5a6; font-style: italic; background: #fdfdfd; }
+        
+        .pref-cell, .result-cell { display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 3px; min-height: 32px; position: relative; }
+        .pref-cell { border: 1px solid #ecf0f1; }
+        .pref-cell:hover { transform: scale(1.08); z-index: 2; }
+        
+        .result-cell { color: #fff; font-size: 11px; cursor: pointer; }
+        .result-cell.off { background: #f5f5f5; color: #ccc; }
+        .result-cell.locked-shift { box-shadow: inset 0 0 0 2px #ffb300; cursor: not-allowed; }
+        .result-cell.locked-shift::before { content: '🔒'; position: absolute; top: -3px; left: -2px; font-size: 9px; }
+        .result-cell.locked-off { background: #fff8e1 !important; border: 2px solid #ffb300; color: #f57c00 !important; cursor: not-allowed; }
+        .result-cell.locked-off::after { content: '🔒'; font-size: 11px; }
+        .result-cell.pref-hit { box-shadow: inset 0 0 0 2px #43a047; }
+        .result-cell.pref-hit::after { content: '★'; position: absolute; top: -4px; right: -1px; font-size: 12px; color: #ffeb3b; text-shadow: 0 0 2px #000; font-weight: 900; }
+        .result-cell.pref-miss { background: #ffebee !important; color: #c62828 !important; box-shadow: inset 0 0 0 2px #e53935; font-size: 14px; }
+        .result-cell.pref-miss::after { content: '✕'; font-weight: 700; color: #c62828; }
 
-  .days .day .num {
-    position: absolute; top: 6px; left: 8px;
-    font-size: 20px; font-weight: 800; line-height: 1;
-  }
+        .legend-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 12px; color: #555; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-badge { width: 16px; height: 16px; border-radius: 4px; display: inline-block; }
+        .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+        .quick-actions button { font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid #ddd; background: #fff; cursor: pointer; }
 
-  .days .day .top-right {
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    display: flex; align-items: center; justify-content: center;
-    gap: 4px; z-index: 2; pointer-events: none; max-width: 100%;
-  }
-  .days .day .people-count {
-    display: inline-flex; align-items: center; justify-content: center;
-    gap: 2px; min-width: 28px; height: 28px; padding: 0 8px;
-    border-radius: 14px; background: #2e7d32; color: #fff;
-    font-size: 15px; font-weight: 900; line-height: 1;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.22);
-  }
-  .days .day .people-count .u { font-size: 10px; font-weight: 700; opacity: 0.85; margin-left: 1px; }
-  .days .day .people-count.zero { background: #e0e0e0; color: #999; box-shadow: none; font-size: 13px; }
-  .days .day.mine .people-count { background: #fff; color: #2e7d32; }
-  .days .day.has-pending .people-count { background: #856404; }
-  .days .day.mine-pending .people-count { background: #5d4200; }
+        .tabs-main { display: flex; gap: 6px; margin-bottom: 12px; }
+        .tab-main { flex: 1; padding: 10px; background: #fff; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; color: #666; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .tab-main.active { background: #3498db; color: #fff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
 
-  .days .day .pend-badge {
-    min-width: 24px; height: 24px; padding: 0 6px;
-    border-radius: 12px; background: #ff9800; color: #fff;
-    font-size: 12px; font-weight: 800;
-    display: inline-flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2); line-height: 1;
-  }
-  .days .day .pend-badge.admin { background: #e91e63; }
-
-  .days .day .names {
-    display: none; flex-direction: column; align-items: center;
-    gap: 2px; width: 100%; padding: 0 2px; margin-top: 34px;
-    overflow: hidden; position: absolute; bottom: 6px; left: 0;
-  }
-  .days .day .names .who {
-    font-size: 12px; line-height: 1.15; font-weight: 700;
-    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    padding: 1px 6px; border-radius: 6px;
-    background: rgba(255,255,255,0.6); color: #1b5e20;
-  }
-  .days .day.mine .names .who { background: rgba(255,255,255,0.28); color: #fff; }
-  .days .day.has-users .names .who { background: rgba(255,255,255,0.7); color: #2e7d32; }
-  .days .day.mine-pending .names .who { background: rgba(255,255,255,0.55); color: #5d4200; }
-  .days .day.has-pending .names .who { background: rgba(255,255,255,0.8); color: #856404; }
-  .days .day .more { font-size: 12px; font-weight: 800; opacity: 0.9;
-    padding: 1px 8px; border-radius: 6px;
-    background: rgba(255,255,255,0.65); color: #1b5e20; }
-  .days .day.mine .more { background: rgba(255,255,255,0.3); color: white; }
-  .days .day.mine-pending .more { background: rgba(255,255,255,0.4); color: #5d4200; }
-  .days .day.has-pending .more { background: rgba(255,255,255,0.8); color: #856404; }
-
-  .days .day .dots {
-    display: none; gap: 4px; justify-content: center;
-    position: absolute; bottom: 10px; left: 50%;
-    transform: translateX(-50%); max-width: 100%;
-  }
-  .days .day .dots .dot { width: 7px; height: 7px; border-radius: 50%; background: #4CAF50; flex-shrink: 0; }
-  .days .day .dots .dot.pending { background: #ff9800; }
-  .days .day .dots .dot.rejected { background: #f44336; }
-
-  .days .day .toggle-btn {
-    position: absolute; bottom: -10px; left: -10px;
-    width: 38px; height: 38px; border-radius: 50%;
-    background: #fff; color: #333; font-size: 24px; font-weight: 900;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-    line-height: 1; padding-bottom: 3px;
-    border: 3px solid #fff;
-    transition: transform 0.08s; z-index: 5;
-  }
-  .days .day .toggle-btn:active { transform: scale(0.85); }
-  .days .day.mine .toggle-btn { background: #d32f2f; color: white; box-shadow: 0 4px 10px rgba(211,47,47,0.5); }
-  .days .day.mine-pending .toggle-btn { background: #ff9800; color: white; box-shadow: 0 4px 10px rgba(255,152,0,0.5); }
-
-  .days .day .chat-btn {
-    position: absolute; top: 5px; right: 5px;
-    min-width: 30px; height: 30px; padding: 0 7px;
-    border-radius: 15px; background: rgba(255,255,255,0.95);
-    color: #1976d2; font-size: 13px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
-    gap: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.18);
-    line-height: 1; transition: transform 0.08s; z-index: 3;
-  }
-  .days .day .chat-btn:active { transform: scale(0.85); }
-  .days .day .chat-btn.has-msg { background: #1976d2; color: #fff; box-shadow: 0 2px 4px rgba(25,118,210,0.4); }
-  .days .day .chat-btn .badge { font-size: 11px; font-weight: 900; }
-
-  .days.hide-approved .day .people-count { display: none !important; }
-  .days.hide-approved .day .names { display: none !important; }
-  .days.hide-approved .day .dots .dot:not(.pending):not(.rejected) { display: none !important; }
-  .days.hide-approved .day.has-users { background: #f5f5f5; color: #222; }
-
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-    display: none; align-items: center; justify-content: center;
-    padding: 8px; z-index: 100; }
-  .modal-backdrop.open { display: flex; }
-  .modal { background: white; border-radius: 18px; width: 100%; max-width: 640px;
-    height: 92vh; max-height: 92vh; box-shadow: 0 10px 40px rgba(0,0,0,0.4);
-    animation: pop 0.15s ease-out; display: flex; flex-direction: column; overflow: hidden; }
-  @keyframes pop { from { transform: scale(0.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  .modal-header { padding: 14px 100px 10px 16px; border-bottom: 1px solid #eee; flex-shrink: 0; position: relative; }
-  .modal-header h3 { margin: 0 0 4px; font-size: 20px; color: #222; }
-  .modal-header .date-label { font-size: 14px; color: #888; }
-  .modal-header .close-x { position: absolute; top: 10px; right: 10px; width: 38px; height: 38px;
-    border: none; border-radius: 50%; background: #f0f0f0; color: #555; font-size: 22px; font-weight: 700;
-    cursor: pointer; display: flex; align-items: center; justify-content: center; }
-  .modal-header .close-x:active { background: #e0e0e0; }
-  .modal-header .settings-x { position: absolute; top: 10px; right: 54px;
-    width: 38px; height: 38px; border: none; border-radius: 50%;
-    background: #f0f0f0; color: #555; font-size: 18px;
-    cursor: pointer; display: none; align-items: center; justify-content: center; }
-  .modal-header .settings-x:active { background: #e0e0e0; }
-  .modal-body { flex: 1 1 auto; overflow-y: auto; padding: 12px 16px; background: #fafafa; }
-
-  .day-settings { background: #fff8e1; border: 1px solid #ffe082; border-radius: 12px;
-    padding: 10px 12px; margin-bottom: 12px; }
-  .day-settings .ds-row { display: flex; align-items: center; gap: 10px;
-    font-size: 15px; font-weight: 600; color: #5d4200; cursor: pointer; }
-  .day-settings .ds-row input { width: 20px; height: 20px; accent-color: #ffa000; }
-  .day-settings .ds-hint { font-size: 12px; color: #8d6e00; margin-top: 6px; line-height: 1.4; }
-
-  .section-title { font-size: 13px; font-weight: 700; color: #666; text-transform: uppercase;
-    letter-spacing: 0.5px; margin: 10px 0 8px; display: flex; align-items: center; gap: 8px; }
-  .section-title:first-child { margin-top: 0; }
-  .section-title .cnt { background: #eee; color: #555; border-radius: 8px; padding: 1px 8px; font-size: 11px; }
-
-  .users-list { list-style: none; padding: 0; margin: 0 0 12px;
-    display: flex; flex-direction: column; gap: 6px; }
-  .users-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-    background: white; border: 1px solid #e0e0e0; border-radius: 12px;
-    font-size: 15px; color: #333; flex-wrap: wrap; }
-  .users-list li.me { background: #e8f5e9; border-color: #a5d6a7; color: #1b5e20; }
-  .users-list li.approved { background: #e8f5e9; border-color: #a5d6a7; }
-  .users-list li.pending { background: #fff8e1; border-color: #ffe082; }
-  .users-list li.rejected { background: #fce4ec; border-color: #f8bbd0; opacity: 0.8; }
-  .users-list li .avatar { width: 34px; height: 34px; border-radius: 50%;
-    background: #4CAF50; color: white;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 15px; flex-shrink: 0; }
-  .users-list li.pending .avatar { background: #ff9800; }
-  .users-list li.rejected .avatar { background: #e91e63; }
-  .users-list li .u-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-  .users-list li .u-name { font-weight: 700; font-size: 15px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .users-list li .u-name .crown { color: #ffa000; }
-  .users-list li .u-phone { font-size: 13px; color: #666; font-weight: 500;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .users-list li .u-phone.empty { color: #bbb; font-style: italic; }
-  .users-list li .status-badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
-  .users-list li .status-badge.approved { background: #c8e6c9; color: #1b5e20; }
-  .users-list li .status-badge.pending { background: #ffe082; color: #856404; }
-  .users-list li .status-badge.rejected { background: #f8bbd0; color: #880e4f; }
-  .users-list li .actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
-  .users-list li .btn-approve, .users-list li .btn-reject, .users-list li .btn-role {
-    display: inline-flex; align-items: center; gap: 4px; padding: 8px 12px;
-    border: none; border-radius: 999px; font-size: 13px; font-weight: 700; cursor: pointer; }
-  .users-list li .btn-approve { background: #4CAF50; color: white; }
-  .users-list li .btn-approve:active { background: #388e3c; }
-  .users-list li .btn-reject { background: #f44336; color: white; }
-  .users-list li .btn-reject:active { background: #d32f2f; }
-  .users-list li .btn-role { background: #ffa000; color: white; }
-  .users-list li .btn-role:active { background: #ef6c00; }
-  .users-list li .max-btn {
-    display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px;
-    border: none; border-radius: 999px; font-size: 13px; font-weight: 700;
-    text-decoration: none; cursor: pointer; background: #7B1FA2; color: white; }
-  .users-list li .max-btn:active { background: #6a1b9a; }
-  .users-list .empty { color: #999; font-style: italic; font-size: 14px; padding: 4px 0;
-    border: none; background: transparent; display: block; }
-
-  .messages-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-  .msg { max-width: 85%; padding: 8px 12px; border-radius: 14px; background: white;
-    border: 1px solid #e6e6e6; font-size: 15px; line-height: 1.35; word-wrap: break-word;
-    align-self: flex-start; }
-  .msg.mine { align-self: flex-end; background: #4CAF50; color: white; border-color: #388e3c; }
-  .msg .meta { font-size: 11px; opacity: 0.75; margin-bottom: 3px;
-    display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-  .msg .meta .who { font-weight: 700; }
-  .msg .text { white-space: pre-wrap; }
-  .messages-empty { text-align: center; color: #999; font-size: 14px; padding: 20px 10px; }
-
-  .composer { flex-shrink: 0; border-top: 1px solid #eee; background: white;
-    padding: 10px 12px; display: flex; gap: 8px; align-items: flex-end; }
-  .composer textarea { flex: 1; resize: none; min-height: 44px; max-height: 120px;
-    padding: 10px 12px; font-size: 16px; font-family: inherit;
-    border: 2px solid #ddd; border-radius: 12px; outline: none; min-width: 0; }
-  .composer textarea:focus { border-color: #4CAF50; }
-  .composer button { padding: 0 18px; height: 44px; min-width: 60px;
-    border: none; border-radius: 12px;
-    background: #4CAF50; color: white; font-size: 16px; font-weight: 700;
-    cursor: pointer; flex-shrink: 0; }
-  .composer button:active { background: #388e3c; }
-  .composer button:disabled { background: #bbb; cursor: not-allowed; }
-
-  .hidden { display: none !important; }
-  .calendar.locked .header, .calendar.locked .weekdays, .calendar.locked .days-wrap
-    { opacity: 0.4; pointer-events: none; }
-  .hint-bottom { font-size: 12px; color: #999; text-align: center; margin-top: 12px; line-height: 1.5; }
-  .step-badge { display: inline-block; background: #4CAF50; color: white; font-size: 12px;
-    font-weight: 700; padding: 2px 8px; border-radius: 8px; margin-bottom: 8px; }
-  .step-badge.admin { background: #ffa000; }
-  .center { text-align: center; }
-  .loading { text-align: center; padding: 40px 10px; color: #888; font-size: 15px; }
-
-  .copyable { cursor: pointer; }
-  .copyable:active { opacity: 0.6; }
-
-  .copy-toast {
-    position: fixed; bottom: 24px; left: 50%;
-    transform: translateX(-50%) translateY(20px);
-    background: #323232; color: #fff; padding: 10px 20px;
-    border-radius: 24px; font-size: 14px; font-weight: 600;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-    opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s;
-    z-index: 999; max-width: 90vw; text-align: center;
-  }
-  .copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-  /* ===== Модалка «Мои цеха» ===== */
-  .ws-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.55);
-    display: none; align-items: center; justify-content: center; padding: 12px; z-index: 250; }
-  .ws-modal.open { display: flex; }
-  .ws-modal .box { background: #fff; border-radius: 18px; width: 100%; max-width: 480px;
-    max-height: 88vh; display: flex; flex-direction: column; overflow: hidden;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.35); animation: pop 0.15s ease-out; }
-  .ws-modal .head { padding: 16px 18px 12px; border-bottom: 1px solid #eee; display: flex;
-    justify-content: space-between; align-items: center; }
-  .ws-modal .head h3 { margin: 0; font-size: 18px; color: #222; }
-  .ws-modal .head .close-x { width: 36px; height: 36px; border: none; border-radius: 50%;
-    background: #f0f0f0; color: #555; font-size: 20px; font-weight: 700;
-    cursor: pointer; display: flex; align-items: center; justify-content: center; }
-  .ws-modal .head .close-x:active { background: #e0e0e0; }
-  .ws-modal .search-wrap { padding: 10px 14px 4px; }
-  .ws-modal .search-wrap input {
-    width: 100%; padding: 11px 14px; font-size: 15px;
-    border: 2px solid #ddd; border-radius: 12px; outline: none; background: #fafafa;
-  }
-  .ws-modal .search-wrap input:focus { border-color: #1976d2; background: #fff; }
-  .ws-modal .list { flex: 1 1 auto; overflow-y: auto; padding: 12px; }
-  .ws-modal .item { display: flex; justify-content: space-between; align-items: center;
-    padding: 12px 14px; border: 2px solid #e0e0e0; border-radius: 14px; margin-bottom: 8px;
-    cursor: pointer; gap: 10px; transition: all 0.15s; }
-  .ws-modal .item:active { transform: scale(0.98); }
-  .ws-modal .item.cur { background: #e8f5e9; border-color: #4CAF50; }
-  .ws-modal .item .left { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-  .ws-modal .item .nm { font-weight: 800; font-size: 16px; color: #222;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ws-modal .item.cur .nm { color: #1b5e20; }
-  .ws-modal .item .rl { font-size: 12px; color: #666; margin-top: 2px; }
-  .ws-modal .item.cur .rl { color: #2e7d32; }
-  .ws-modal .item .check { font-size: 20px; color: #4CAF50; flex-shrink: 0; }
-  .ws-modal .item .del-btn {
-    width: 38px; height: 38px; border: none; border-radius: 50%;
-    background: #fce4ec; color: #c62828; font-size: 18px;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; transition: transform 0.1s, background 0.15s;
-  }
-  .ws-modal .item .del-btn:active { transform: scale(0.9); background: #f8bbd0; }
-  .ws-modal .foot { padding: 12px; border-top: 1px solid #eee; background: #fafafa;
-    display: flex; flex-direction: column; gap: 8px; }
-  .ws-modal .foot button { width: 100%; padding: 13px; border-radius: 12px;
-    font-size: 15px; font-weight: 700; cursor: pointer; border: none; }
-  .ws-modal .foot .add-btn { background: #1976d2; color: #fff; }
-  .ws-modal .foot .add-btn:active { background: #0d47a1; }
-  .ws-modal .foot .cancel-btn { background: #fff; color: #555; border: 2px solid #ddd; }
-  .ws-modal .foot .cancel-btn:active { background: #f0f0f0; }
-  .ws-modal .empty { text-align: center; color: #999; font-size: 14px; padding: 24px 12px; font-style: italic; }
-  .ws-modal .empty-search { text-align: center; color: #999; font-size: 14px;
-    padding: 20px 12px; font-style: italic; }
-
-  /* ===== Модалка подтверждения удаления ===== */
-  .del-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.65);
-    display: none; align-items: center; justify-content: center; padding: 12px; z-index: 300; }
-  .del-modal.open { display: flex; }
-  .del-modal .box { background: #fff; border-radius: 18px; width: 100%; max-width: 420px;
-    overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.4); animation: pop 0.15s ease-out; }
-  .del-modal .box .top { padding: 20px 20px 14px; text-align: center; }
-  .del-modal .box .icon { font-size: 48px; line-height: 1; margin-bottom: 8px; }
-  .del-modal .box h3 { margin: 0 0 8px; font-size: 19px; color: #c62828; }
-  .del-modal .box .name { font-weight: 800; color: #222; font-size: 16px;
-    word-break: break-word; margin-bottom: 10px; }
-  .del-modal .box .warn { font-size: 13px; color: #666; line-height: 1.5;
-    background: #fff3cd; border: 1px solid #ffe082; border-radius: 10px;
-    padding: 10px 12px; text-align: left; }
-  .del-modal .box .warn b { color: #856404; }
-  .del-modal .box .warn ul { margin: 6px 0 0 18px; padding: 0; }
-  .del-modal .box .warn li { margin: 2px 0; }
-  .del-modal .box .btns { display: flex; gap: 8px; padding: 14px 16px 16px; }
-  .del-modal .box .btns button { flex: 1; padding: 13px; border-radius: 12px;
-    font-size: 15px; font-weight: 700; cursor: pointer; border: none; }
-  .del-modal .box .btn-cancel { background: #f0f0f0; color: #333; }
-  .del-modal .box .btn-cancel:active { background: #e0e0e0; }
-  .del-modal .box .btn-danger { background: #d32f2f; color: #fff; }
-  .del-modal .box .btn-danger:active { background: #b71c1c; }
-  .del-modal .box .btn-danger:disabled { background: #ef9a9a; cursor: wait; }
-
-  /* ===== Мои цеха (шаг 2) ===== */
-  .my-ws-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
-  .my-ws-list .item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 12px 14px; border: 2px solid #e0e0e0; border-radius: 14px;
-    background: #fff; cursor: pointer; transition: all 0.15s;
-  }
-  .my-ws-list .item:active { transform: scale(0.98); }
-  .my-ws-list .item .left { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-  .my-ws-list .item .nm {
-    font-weight: 800; font-size: 16px; color: #222;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .my-ws-list .item .rl { font-size: 12px; color: #666; margin-top: 2px; }
-  .my-ws-list .item .enter {
-    padding: 8px 14px; border-radius: 10px; border: none;
-    background: #4CAF50; color: #fff; font-weight: 700; font-size: 14px;
-    cursor: pointer; flex-shrink: 0;
-  }
-  .my-ws-list .item .enter:active { background: #388e3c; }
-  .my-ws-list .empty {
-    text-align: center; color: #999; font-style: italic;
-    font-size: 14px; padding: 16px 10px;
-  }
-
-  /* ===== СЕТКА РАСЧЁТА ГРАФИКА ===== */
-  .sch-hdr-day { text-align: center; font-size: 11px; font-weight: bold; color: #666; padding-bottom: 2px; }
-  .sch-hdr-wd { text-align: center; font-size: 9px; color: #999; padding-bottom: 4px; text-transform: uppercase; }
-  .sch-hdr-we { color: #e74c3c !important; }
-  .sch-cell {
-    display: flex; align-items: center; justify-content: center;
-    border: 1px solid #ddd; border-radius: 4px; margin: 1px;
-    font-size: 14px; cursor: pointer;
-    min-height: 32px; transition: background 0.15s;
-  }
-  .sch-cell.available { background: #fff; }
-  .sch-cell.preferred { background: #c8e6c9; }
-  .sch-cell.unavailable { background: #ffcdd2; }
-  .sch-cell.vacation { background: #bbdefb; }
-  .sch-cell:hover { outline: 2px solid #4CAF50; z-index: 2; }
-  .sch-emp-name { font-size: 12px; display: flex; align-items: center; gap: 4px; padding-right: 4px; overflow: hidden; }
-  .sch-emp-name input { cursor: pointer; width: 16px; height: 16px; flex-shrink: 0; }
-  .sch-emp-preset { font-size: 11px; padding: 2px; max-width: 60px; border: 1px solid #ccc; border-radius: 4px; flex-shrink: 0; }
-
-  @media (min-width: 560px) {
-    .header h2 { font-size: 24px; }
-    .header button { width: 56px; height: 56px; min-width: 56px; font-size: 30px; }
-    .weekdays div { font-size: 15px; padding: 8px 0; }
-    .weekdays, .days { gap: 14px; }
-    .days-wrap { padding: 0 14px 14px; margin: 0 -14px; }
-    .days .day { min-height: 124px; padding: 34px 8px 34px; border-radius: 14px; }
-    .days .day .num { font-size: 22px; top: 8px; left: 10px; }
-    .days .day .top-right { gap: 5px; }
-    .days .day .people-count { min-width: 30px; height: 30px; padding: 0 9px; font-size: 15px; border-radius: 15px; }
-    .days .day .pend-badge { min-width: 26px; height: 26px; font-size: 13px; border-radius: 13px; }
-    .days .day .names { display: flex; bottom: 8px; }
-    .days .day .names .who { font-size: 13px; padding: 2px 8px; }
-    .days .day .dots { display: none !important; }
-    .days .day .toggle-btn {
-      width: 44px; height: 44px; font-size: 26px;
-      bottom: -12px; left: -12px; border: 3px solid #fff;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.32);
-    }
-    .days .day .chat-btn { min-width: 34px; height: 34px; padding: 0 9px; font-size: 15px; border-radius: 17px; top: 6px; right: 6px; }
-    .days .day .chat-btn .badge { font-size: 12px; }
-  }
-  @media (max-width: 559px) {
-    body { padding: 5px; padding-top: max(5px, env(safe-area-inset-top)); padding-bottom: max(5px, env(safe-area-inset-bottom)); }
-    .calendar { padding: 10px; border-radius: 14px; }
-    .logged-bar { padding: 8px 10px; margin-bottom: 10px; }
-    .logged-bar .name { font-size: 14px; }
-    .logged-bar .ws { font-size: 11px; }
-    .logged-bar button { padding: 6px 10px; font-size: 13px; }
-    .weekdays, .days { gap: 9px; }
-    .weekdays div { font-size: 12px; padding: 4px 0; }
-    .days-wrap { padding: 0 9px 9px; margin: 0 -9px; }
-    .days .day { min-height: 92px; border-radius: 10px; padding: 26px 4px 26px; }
-    .days .day .num { font-size: 17px; top: 4px; left: 5px; }
-    .days .day .top-right { gap: 3px; }
-    .days .day .people-count { min-width: 26px; height: 26px; padding: 0 7px; font-size: 14px; border-radius: 13px; }
-    .days .day .people-count .u { font-size: 9px; }
-    .days .day .pend-badge { min-width: 22px; height: 22px; padding: 0 5px; font-size: 11px; border-radius: 11px; }
-    .days .day .dots { display: flex; bottom: 8px; gap: 3px; }
-    .days .day .dots .dot { width: 5px; height: 5px; }
-    .days .day .names { display: none; }
-    .days .day .toggle-btn { width: 32px; height: 32px; font-size: 20px; bottom: -8px; left: -8px; border: 2px solid #fff; }
-    .days .day .chat-btn { min-width: 28px; height: 28px; padding: 0 6px; font-size: 12px; border-radius: 14px; top: 4px; right: 4px; }
-    .days .day .chat-btn .badge { font-size: 10px; }
-    .modal { border-radius: 14px; }
-    .modal-header { padding: 12px 96px 8px 14px; }
-    .modal-header h3 { font-size: 17px; }
-    .modal-header .date-label { font-size: 13px; }
-    .modal-header .close-x, .modal-header .settings-x { width: 34px; height: 34px; font-size: 18px; }
-    .modal-header .settings-x { right: 50px; }
-    .users-list li { padding: 7px 9px; gap: 8px; font-size: 14px; }
-    .users-list li .avatar { width: 30px; height: 30px; font-size: 13px; }
-    .users-list li .u-name { font-size: 14px; }
-    .users-list li .u-phone { font-size: 12px; }
-    .users-list li .btn-approve, .users-list li .btn-reject,
-    .users-list li .btn-role, .users-list li .max-btn { padding: 6px 10px; font-size: 12px; }
-    .composer { padding: 8px 10px; }
-    .composer textarea { font-size: 15px; padding: 8px 10px; min-height: 40px; }
-    .composer button { height: 40px; min-width: 52px; font-size: 15px; padding: 0 14px; }
-    .auth .form-row input { padding: 12px; font-size: 16px; }
-    .auth .btn-primary { padding: 12px; font-size: 16px; }
-    .auth .btn-secondary { padding: 11px; font-size: 15px; }
-    .auth select { padding: 12px; font-size: 16px; }
-  }
-</style>
+        .empty-state { text-align: center; padding: 40px 20px; color: #999; }
+        #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c3e50; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 9999; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+    </style>
 </head>
 <body>
 
-<div class="calendar locked" id="calendar">
-  <div id="loadingBlock" class="loading">Загрузка…</div>
+    <!-- ЭКРАН 1: АВТОРИЗАЦИЯ / РЕГИСТРАЦИЯ -->
+    <div id="auth-screen" class="screen active">
+        <div class="auth-box">
+            <h2>Вход в систему</h2>
+            <div class="tabs">
+                <button class="tab active" id="tab-login">Вход</button>
+                <button class="tab" id="tab-register">Регистрация</button>
+            </div>
+            <div id="error-box" class="error"></div>
 
-  <div class="auth hidden" id="accountBlock">
-    <div class="center"><span class="step-badge">Шаг 1 — Аккаунт</span></div>
-    <h3 id="accountTitle">Вход в аккаунт</h3>
-    <div class="form-row"><input type="text" id="accLogin" placeholder="Логин" autocomplete="username"></div>
-    <div class="form-row"><input type="password" id="accPass" placeholder="Пароль" autocomplete="current-password"></div>
-    <div class="form-row hidden" id="accPhoneRow"><input type="tel" id="accPhone" placeholder="Телефон (необязательно)" inputmode="tel"></div>
-    <div class="form-row hidden" id="accMaxRow"><input type="text" id="accMax" placeholder="MAX username (необязательно)"></div>
-    <button class="btn-primary" id="accLoginBtn">Войти</button>
-    <button class="btn-secondary" id="accRegisterBtn">Зарегистрироваться</button>
-    <div class="hint" id="accHint"></div>
-  </div>
+            <div id="form-login">
+                <input type="text" id="login-user" placeholder="Логин">
+                <input type="password" id="login-pass" placeholder="Пароль">
+                <button onclick="loginAccount()">Войти</button>
+            </div>
 
-  <div class="auth hidden" id="workshopBlock">
-    <div class="center"><span class="step-badge">Шаг 2 — Цех</span></div>
-    <h3>Вход в цех</h3>
-
-    <div id="myWsListWrap">
-      <div class="form-row" style="margin-bottom:6px;">
-        <input type="text" id="myWsSearch" placeholder="🔍 Поиск по моим цехам..." autocomplete="off">
-      </div>
-      <div class="my-ws-list" id="myWsList"></div>
-      <button class="btn-link" id="showAddWsBtn">+ Добавить ещё цех по паролю</button>
-    </div>
-
-    <div id="addWsWrap" class="hidden">
-      <div class="form-row" style="margin-bottom:6px;">
-        <input type="text" id="workshopSearch" placeholder="🔍 Поиск цеха..." autocomplete="off">
-      </div>
-      <select id="workshopSelect"></select>
-      <div class="form-row"><input type="password" id="workshopPass" placeholder="Пароль цеха" autocomplete="off"></div>
-      <div class="form-row"><input type="text" id="membershipName" placeholder="Ваше имя в цехе" autocomplete="off"></div>
-      <button class="btn-primary" id="workshopEnterBtn">Войти в цех</button>
-      <button class="btn-link" id="showCreateWorkshopBtn">+ Создать новый цех</button>
-      <button class="btn-link" id="cancelAddWsBtn">← Назад к моим цехам</button>
-    </div>
-
-    <div id="workshopCreateWrap" class="hidden">
-      <div class="form-row"><input type="text" id="newWorkshopLine" placeholder="Название цеха и пароль (пример: Сборка 12345)" autocomplete="off"></div>
-      <button class="btn-primary" id="createWorkshopBtn">Создать цех</button>
-      <button class="btn-link" id="showJoinWorkshopBtn">← Назад к добавлению</button>
-    </div>
-
-    <button class="btn-link hidden" id="backToCalendarBtn">← Вернуться к календарю</button>
-    <button class="btn-link" id="backToAccountBtn">← Сменить аккаунт</button>
-    <div class="hint" id="workshopHint"></div>
-  </div>
-
-  <div class="logged-bar hidden" id="loggedBar">
-    <div class="info">
-      <span class="name" id="loggedName">—</span>
-      <span class="ws" id="loggedWorkshop">—</span>
-      <span class="my-phone hidden" id="loggedPhone"></span>
-    </div>
-    <div class="btns">
-      <button class="schedule-btn" id="scheduleBtn" style="display: none;">📊 График</button>
-      <button class="switch-btn" id="switchWsBtn">Сменить цех</button>
-      <button id="logoutBtn">Выйти</button>
-    </div>
-  </div>
-
-  <div class="header">
-    <button id="prev">‹</button>
-    <h2 id="monthYear"></h2>
-    <button id="next">›</button>
-  </div>
-  <div class="weekdays"><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div></div>
-  <div class="days-wrap">
-    <div class="days" id="days"></div>
-  </div>
-  <div class="hint-bottom">💬 — сообщения. + / − — заявка на смену. Кнопка «Сменить цех» — переход между цехами.</div>
-</div>
-
-<div class="modal-backdrop" id="modalBackdrop">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="modalTitle">День</h3>
-      <div class="date-label" id="modalDate"></div>
-      <button class="settings-x" id="modalSettings" title="Настройки">⚙️</button>
-      <button class="close-x" id="modalClose">✕</button>
-    </div>
-    <div class="modal-body" id="modalBody">
-      <div class="day-settings hidden" id="daySettings">
-        <label class="ds-row">
-          <input type="checkbox" id="setShowApproved">
-          <span>Показывать одобренных в календаре</span>
-        </label>
-        <div class="ds-hint">
-          Влияет только на сетку календаря (фон, счётчик, имена).
-          Внутри карточки дня все участники — одобренные, заявки и отклонённые — видны всегда.
+            <div id="form-register" style="display: none;">
+                <input type="text" id="reg-name" placeholder="Имя">
+                <input type="text" id="reg-surname" placeholder="Фамилия">
+                <input type="text" id="reg-user" placeholder="Логин">
+                <input type="password" id="reg-pass" placeholder="Пароль">
+                <button class="btn-primary" style="background: var(--success);" onclick="registerAccount()">Зарегистрироваться</button>
+            </div>
         </div>
-      </div>
-
-      <div class="section-title">💬 Сообщения <span class="cnt" id="cntMessages">0</span></div>
-      <div class="messages-list" id="messagesList"></div>
-      <div class="messages-empty hidden" id="messagesEmpty">Сообщений пока нет — напишите первое 👇</div>
-
-      <div class="section-title" id="secApproved" style="display:none;">✅ В смене <span class="cnt" id="cntApproved">0</span></div>
-      <ul class="users-list" id="listApproved"></ul>
-
-      <div class="section-title" id="secPending" style="display:none;">⏳ Заявки <span class="cnt" id="cntPending">0</span></div>
-      <ul class="users-list" id="listPending"></ul>
-
-      <div class="section-title" id="secRejected" style="display:none;">✗ Отклонены <span class="cnt" id="cntRejected">0</span></div>
-      <ul class="users-list" id="listRejected"></ul>
     </div>
-    <div class="composer">
-      <textarea id="msgInput" placeholder="Написать сообщение…" rows="1" maxlength="1000"></textarea>
-      <button id="msgSend" disabled>➤</button>
+
+    <!-- ЭКРАН 2: ВЫБОР ЦЕХА -->
+    <div id="workshop-screen" class="screen">
+        <div class="auth-box">
+            <h2>Мои цеха</h2>
+            <div class="info">Вы вошли как: <strong id="current-user-name"></strong></div>
+            
+            <div id="my-workshops-list"></div>
+            
+            <h3 style="font-size: 14px; margin: 15px 0 5px;">Действия</h3>
+            <button class="secondary" id="btn-show-join" style="margin-bottom: 5px;">Войти в цех по ID</button>
+            <div id="form-join" style="display:none; margin-bottom: 10px;">
+                <input type="text" id="join-id" placeholder="ID цеха (например: ws_12345)">
+                <input type="password" id="join-pass" placeholder="Пароль цеха">
+                <button onclick="joinWorkshop()">Войти</button>
+            </div>
+
+            <button class="secondary" id="btn-show-create" style="margin-bottom: 5px;">Создать новый цех</button>
+            <div id="form-create" style="display:none; margin-bottom: 10px;">
+                <input type="text" id="create-name" placeholder="Название цеха">
+                <input type="password" id="create-pass" placeholder="Пароль цеха">
+                <button class="btn-success" onclick="createWorkshop()">Создать</button>
+            </div>
+
+            <button class="secondary" onclick="logout()" style="margin-top: 15px; color: var(--danger);">Сменить аккаунт</button>
+        </div>
     </div>
-  </div>
-</div>
 
-<div class="ws-modal" id="wsModal">
-  <div class="box">
-    <div class="head">
-      <h3>Мои цеха</h3>
-      <button class="close-x" id="wsModalClose">✕</button>
+    <!-- ЭКРАН 3: ГЛАВНЫЙ (ГРАФИК) -->
+    <div id="main-screen" class="screen">
+        <div class="container">
+            <header>
+                <div>
+                    <h1 id="ws-title">Цех</h1>
+                    <div class="user-info">Пользователь: <strong id="user-display"></strong> (<span id="ws-role">Роль</span>)</div>
+                    <div style="font-size:12px; color:#888; margin-top:4px;">ID цеха: <span id="ws-id-display" style="font-weight:bold; color:var(--primary);"></span></div>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="btn-danger" id="clearLocksBtn" onclick="clearAllLocks()" style="display:none;">🔓 Снять блокировки</button>
+                    <button class="btn-primary" id="generateBtn" onclick="generateAndShow()">⚡ Рассчитать график</button>
+                    <button onclick="leaveWorkshop()">Выйти из цеха</button>
+                </div>
+            </header>
+
+            <div class="panel top-bar" id="settings-panel">
+                <div style="display:flex; gap:15px; align-items:center;">
+                    <label>Смен в день: <select id="shiftsPerDay" onchange="onSettingsChange()"><option value="1">1</option><option value="2" selected>2</option></select></label>
+                    <label>Человек в смене: <input type="number" id="perShift" min="1" max="10" value="4" style="width:60px; padding:4px;" onchange="onSettingsChange()"></label>
+                </div>
+            </div>
+
+            <div class="tabs-main">
+                <button class="tab-main active" onclick="switchTab('setup', this)">👥 Предпочтения</button>
+                <button class="tab-main" onclick="switchTab('result', this)">📊 Результат</button>
+            </div>
+
+            <div id="tab-setup" class="tab-content active">
+                <div class="panel">
+                    <h3>Предпочтения на месяц</h3>
+                    <div class="legend-row">
+                        <span class="legend-item"><span class="legend-badge" style="background:#fff;border:1px solid #ddd;"></span> Доступен</span>
+                        <span class="legend-item"><span class="legend-badge" style="background:#c8e6c9;"></span> ★ Хочу работать</span>
+                        <span class="legend-item"><span class="legend-badge" style="background:#ffcdd2;"></span> Не могу</span>
+                        <span class="legend-item"><span class="legend-badge" style="background:#bbdefb;"></span> Отпуск</span>
+                        <span class="legend-item"><span class="legend-badge" style="background:#f0f0f0; border:1px dashed #aaa;"></span> Свободный слот</span>
+                    </div>
+                    <div class="quick-actions">
+                        <button onclick="setAllPrefs('available')">✓ Все доступны</button>
+                        <button onclick="setAllPrefs('preferred')">★ Все хотят работать</button>
+                        <button onclick="clearAllPrefs()">✕ Очистить всё</button>
+                    </div>
+                    <div class="grid-wrap"><div id="prefGrid" class="grid"></div></div>
+                </div>
+            </div>
+
+            <div id="tab-result" class="tab-content">
+                <div class="panel">
+                    <div id="resultEmpty" class="empty-state">Нажмите «Рассчитать график» для генерации</div>
+                    <div id="resultContent" style="display:none;">
+                        <div class="info-banner" style="background:#e3f2fd; padding:10px; border-radius:8px; font-size:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                            <span>💡 <strong>Донастройка:</strong> Кликните по ячейке, чтобы зафиксировать смену (🔒).</span>
+                        </div>
+                        
+                        <!-- БЛОК КОПИРОВАНИЯ -->
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; background:#f8f9fa; padding:10px; border-radius:8px; border:1px solid #eee;">
+                            <span style="font-weight:600; font-size:13px; color:#555;">📋 Копировать в чат:</span>
+                            <input type="date" id="copy-date" style="padding:6px; border-radius:6px; border:1px solid #ccc; font-family:inherit;">
+                            <button class="btn-success" onclick="copyResult('day')">День</button>
+                            <button class="btn-success" onclick="copyResult('week')">Неделя</button>
+                            <button class="btn-success" onclick="copyResult('month')">Месяц</button>
+                        </div>
+
+                        <div class="grid-wrap"><div id="resultGrid" class="grid"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="search-wrap">
-      <input type="text" id="wsModalSearch" placeholder="🔍 Поиск по названию..." autocomplete="off">
-    </div>
-    <div class="list" id="wsModalList"></div>
-    <div class="foot">
-      <button class="add-btn" id="wsModalAddBtn">+ Войти в новый цех</button>
-      <button class="cancel-btn" id="wsModalCancelBtn">Закрыть</button>
-    </div>
-  </div>
-</div>
 
-<div class="del-modal" id="delModal">
-  <div class="box">
-    <div class="top">
-      <div class="icon">⚠️</div>
-      <h3>Удалить цех?</h3>
-      <div class="name" id="delModalName">—</div>
-      <div class="warn">
-        <b>Будут удалены ВСЕ данные цеха:</b>
-        <ul>
-          <li>все участники</li>
-          <li>все отметки смен</li>
-          <li>все сообщения дня</li>
-          <li>все события и «прочитано»</li>
-        </ul>
-        <div style="margin-top:6px;"><b>Действие необратимо.</b></div>
-      </div>
-    </div>
-    <div class="btns">
-      <button class="btn-cancel" id="delModalCancel">Отмена</button>
-      <button class="btn-danger" id="delModalConfirm">Удалить навсегда</button>
-    </div>
-  </div>
-</div>
+    <div id="toast">Сообщение</div>
 
-<div class="modal-backdrop" id="scheduleBackdrop">
-  <div class="modal" style="max-width: 1000px; height: 95vh; max-height: 95vh;">
-    <div class="modal-header">
-      <h3 id="schTitle">📅 График смен</h3>
-      <div class="date-label" id="schDateLabel">Настройки и предпочтения</div>
-      <button class="close-x" id="scheduleClose">✕</button>
-    </div>
-    <div class="modal-body" style="padding: 10px;">
-      
-      <div class="day-settings" id="schSettings" style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; background: #e3f2fd; border-color: #90caf9;">
-        <label style="font-size: 13px; font-weight: bold; color: #1565c0;">Смен в день:
-          <select id="schShiftsPerDay" style="padding: 4px; border-radius: 6px; border: 1px solid #90caf9;">
-            <option value="1">1</option>
-            <option value="2" selected>2</option>
-          </select>
-        </label>
-        <label style="font-size: 13px; font-weight: bold; color: #1565c0;">Человек в смене:
-          <input type="number" id="schPerShift" value="4" min="1" max="10" style="width: 50px; padding: 4px; border-radius: 6px; border: 1px solid #90caf9;">
-        </label>
-        <button id="schCopyBtn" style="background: #1976d2; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; margin-left: auto; display: none;">📋 Скопировать</button>
-        <button id="schCalcBtn" style="background: #4CAF50; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; display: none;">⚡ Рассчитать</button>
-      </div>
+    <!-- FIREBASE SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
-      <div id="schPresetWrap" style="display: flex; margin-bottom: 10px; background: #f0f0f0; padding: 8px; border-radius: 8px; align-items: center; gap: 6px; flex-wrap: wrap;">
-        <span style="font-size: 12px; font-weight: bold; color: #555;">Быстрое заполнение:</span>
-        <button class="sch-global-preset" data-c="4" data-w="2" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">2/2</button>
-        <button class="sch-global-preset" data-c="4" data-w="3" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">3/1</button>
-        <button class="sch-global-preset" data-c="2" data-w="1" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">1/1</button>
-        <button class="sch-global-preset" data-c="3" data-w="1" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">1/2</button>
-        <button class="sch-global-preset" data-c="7" data-w="5" style="background: #fff; border: 1px solid #4CAF50; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">5/2</button>
-        <button id="schPresetClear" style="background: #fff; border: 1px solid #e53935; color: #c62828; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">Сбросить всех</button>
-      </div>
+    <script>
+        // ==========================================
+        // 1. КОНФИГ И УТИЛИТЫ
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBiu5vKO9khrFtru3lFC8xEj6zKZSj6o4",
+            authDomain: "my-sit-d3ef5.firebaseapp.com",
+            databaseURL: "https://my-sit-d3ef5-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "my-sit-d3ef5",
+            storageBucket: "my-sit-d3ef5.firebasestorage.app",
+            messagingSenderId: "483741682455",
+            appId: "1:483741682455:web:3c6ad2d39e97a687ab4552"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-      <div style="font-size: 13px; color: #555; margin-bottom: 8px; line-height: 1.4;">
-        Клик по ячейке меняет предпочтение: <span style="color: #666;">⚪ Доступен</span> → <span style="color: #2e7d32;">✅ Хочу</span> → <span style="color: #c62828;">❌ Не могу</span> → <span style="color: #1565c0;">🏖️ Отпуск</span>
-        <br>🔒 <strong>Приоритет</strong> — сохранить текущие смены сотрудника без изменений (только для админа).
-      </div>
-
-      <div class="grid-wrap" style="overflow-x: auto; border: 1px solid #ddd; border-radius: 8px; background: #fafafa; padding: 6px;">
-        <div id="schGrid" class="grid" style="display: grid; gap: 2px;"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="copy-toast" id="copyToast">Скопировано</div>
-
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
-  import { getDatabase, ref, onValue, set, remove, get, child, push, update }
-    from "https://www.gstatic.com/firebasejs/13.0.0/firebase-database.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyBiu5vKO9khr9Ftru3lFC8xEj6zKZSj6o4",
-    authDomain: "my-sit-d3ef5.firebaseapp.com",
-    databaseURL: "https://my-sit-d3ef5-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "my-sit-d3ef5",
-    storageBucket: "my-sit-d3ef5.firebasestorage.app",
-    messagingSenderId: "483741682455",
-    appId: "1:483741682455:web:3c6ad2d39e97a687ab4552"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-
-  const $ = id => document.getElementById(id);
-  const calendarEl = $('calendar'), monthYear = $('monthYear'), daysEl = $('days');
-  const prevBtn = $('prev'), nextBtn = $('next');
-  const loadingBlock = $('loadingBlock');
-
-  const accountBlock = $('accountBlock');
-  const accLogin = $('accLogin'), accPass = $('accPass'), accPhone = $('accPhone'), accMax = $('accMax');
-  const accPhoneRow = $('accPhoneRow'), accMaxRow = $('accMaxRow');
-  const accLoginBtn = $('accLoginBtn'), accRegisterBtn = $('accRegisterBtn'), accHint = $('accHint');
-  const accountTitle = $('accountTitle');
-
-  const workshopBlock = $('workshopBlock'), workshopSelect = $('workshopSelect');
-  const workshopSearch = $('workshopSearch');
-  const workshopPass = $('workshopPass'), workshopEnterBtn = $('workshopEnterBtn');
-  const workshopHint = $('workshopHint');
-  const newWorkshopLine = $('newWorkshopLine');
-  const membershipName = $('membershipName');
-  const createWorkshopBtn = $('createWorkshopBtn');
-  const showCreateWorkshopBtn = $('showCreateWorkshopBtn'), showJoinWorkshopBtn = $('showJoinWorkshopBtn');
-  const backToAccountBtn = $('backToAccountBtn'), backToCalendarBtn = $('backToCalendarBtn');
-
-  const myWsListWrap = $('myWsListWrap'), myWsList = $('myWsList'), myWsSearch = $('myWsSearch');
-  const addWsWrap = $('addWsWrap');
-  const showAddWsBtn = $('showAddWsBtn'), cancelAddWsBtn = $('cancelAddWsBtn');
-
-  const workshopCreateWrap = $('workshopCreateWrap');
-
-  const loggedBar = $('loggedBar'), loggedName = $('loggedName'), loggedWorkshop = $('loggedWorkshop');
-  const loggedPhone = $('loggedPhone'), logoutBtn = $('logoutBtn'), switchWsBtn = $('switchWsBtn');
-  const scheduleBtn = $('scheduleBtn');
-
-  const modalBackdrop = $('modalBackdrop'), modalTitle = $('modalTitle'), modalDate = $('modalDate');
-  const modalBody = $('modalBody'), modalClose = $('modalClose');
-  const modalSettings = $('modalSettings'), daySettings = $('daySettings'), setShowApproved = $('setShowApproved');
-  const secApproved = $('secApproved'), listApproved = $('listApproved'), cntApproved = $('cntApproved');
-  const secPending = $('secPending'), listPending = $('listPending'), cntPending = $('cntPending');
-  const secRejected = $('secRejected'), listRejected = $('listRejected'), cntRejected = $('cntRejected');
-  const messagesList = $('messagesList'), messagesEmpty = $('messagesEmpty');
-  const cntMessages = $('cntMessages');
-  const msgInput = $('msgInput'), msgSend = $('msgSend');
-
-  const wsModal = $('wsModal'), wsModalList = $('wsModalList');
-  const wsModalClose = $('wsModalClose'), wsModalCancelBtn = $('wsModalCancelBtn');
-  const wsModalAddBtn = $('wsModalAddBtn'), wsModalSearch = $('wsModalSearch');
-
-  const delModal = $('delModal'), delModalName = $('delModalName');
-  const delModalCancel = $('delModalCancel'), delModalConfirm = $('delModalConfirm');
-
-  const scheduleBackdrop = $('scheduleBackdrop'), scheduleClose = $('scheduleClose');
-  const schGrid = $('schGrid'), schCalcBtn = $('schCalcBtn'), schCopyBtn = $('schCopyBtn');
-
-  const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-  const today = new Date();
-  let currentYear = today.getFullYear(), currentMonth = today.getMonth();
-
-  let currentAccount = null;
-  let currentWorkshop = null;
-  let currentMembership = null;
-  let myWorkshops = [];
-  let allWorkshopsList = [];
-  let availableWorkshops = [];
-  let allMarks = {}, msgCounts = {}, unseenByDay = {};
-  let workshopSettings = { showApprovedInCalendar: true };
-  let openDayKey = null;
-  let pendingDeleteWs = null;
-  let unsubMarks = null, unsubMsgCounts = null, unsubEvents = null, unsubModalMsgs = null, unsubSettings = null;
-
-  // Schedule state
-  let schMembers = [];
-  let schPrefs = {};
-  let schLocks = {};
-  let schCurrentMarks = {};
-
-  const isCreator = () => currentWorkshop && currentAccount && currentWorkshop.createdBy === currentAccount.key;
-  const isAdmin = () => {
-    if (!currentWorkshop || !currentAccount) return false;
-    return isCreator() || (currentMembership && currentMembership.role === 'admin');
-  };
-
-  const safeKey = s => encodeURIComponent((s || '').trim().toLowerCase());
-  const dayKey = (y, m, d) => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-  const initials = n => (n || '?').trim().slice(0,1).toUpperCase();
-  const setHint = (el, msg, isErr=false) => { el.textContent = msg; el.classList.toggle('error', isErr); };
-  const digitsOnly = s => (s || '').replace(/\D/g, '');
-  const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const formatTime = ts => { if (!ts) return ''; const d = new Date(ts); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); };
-
-  // Символы для графика
-  const SCH_SYMBOLS = { available: '⚪', preferred: '✅', unavailable: '❌', vacation: '🏖️' };
-
-  async function sha256(text) {
-    const data = new TextEncoder().encode(text);
-    const buf = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  function normalizePhone(raw) {
-    if (!raw) return '';
-    let d = digitsOnly(raw);
-    if (d.length === 11 && d[0] === '8') d = '7' + d.slice(1);
-    return d;
-  }
-  function formatPhone(d) {
-    if (!d) return '';
-    if (d.length === 11 && d[0] === '7') return '+7 ' + d.slice(1,4) + ' ' + d.slice(4,7) + '-' + d.slice(7,9) + '-' + d.slice(9,11);
-    if (d.length === 10) return '+7 ' + d.slice(0,3) + ' ' + d.slice(3,6) + '-' + d.slice(6,8) + '-' + d.slice(8,10);
-    return '+' + d;
-  }
-  function cleanMax(raw) {
-    raw = (raw || '').trim();
-    if (!raw) return '';
-    const m = raw.match(/max\.ru\/(?:u\/|join\/)?([^/?\s]+)/);
-    if (m) return m[1];
-    return raw.replace(/[^A-Za-z0-9_.]/g, '');
-  }
-  function maxUrl(path) {
-    if (!path) return '';
-    if (/^https?:\/\//i.test(path)) return path;
-    return 'https://max.ru/' + path;
-  }
-
-  let copyToastTimer = null;
-  function showCopyToast(text) {
-    const t = $('copyToast');
-    t.textContent = text || 'Скопировано';
-    t.classList.add('show');
-    if (copyToastTimer) clearTimeout(copyToastTimer);
-    copyToastTimer = setTimeout(() => t.classList.remove('show'), 1400);
-  }
-  async function copyPhone(rawDigits) {
-    if (!rawDigits) return;
-    const pretty = formatPhone(rawDigits);
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(pretty);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = pretty; ta.style.position = 'fixed'; ta.style.opacity = '0';
-        document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      showCopyToast('📱 ' + pretty + ' скопирован');
-    } catch (e) { showCopyToast('Не удалось скопировать'); }
-  }
-
-  function lockCalendar(locked) { calendarEl.classList.toggle('locked', locked); }
-
-  function showLoading() {
-    loadingBlock.classList.remove('hidden');
-    accountBlock.classList.add('hidden');
-    workshopBlock.classList.add('hidden');
-    loggedBar.classList.add('hidden');
-    lockCalendar(true);
-  }
-  function showAccountStep() {
-    loadingBlock.classList.add('hidden');
-    accountBlock.classList.remove('hidden');
-    workshopBlock.classList.add('hidden');
-    loggedBar.classList.add('hidden');
-    lockCalendar(true);
-    accountTitle.textContent = 'Вход в аккаунт';
-    accLoginBtn.classList.remove('hidden');
-    accRegisterBtn.classList.remove('hidden');
-    accPhoneRow.classList.add('hidden');
-    accMaxRow.classList.add('hidden');
-    accPass.value = '';
-    setHint(accHint, '');
-  }
-  async function showWorkshopStep(returnToCalendar) {
-    loadingBlock.classList.add('hidden');
-    accountBlock.classList.add('hidden');
-    workshopBlock.classList.remove('hidden');
-    loggedBar.classList.add('hidden');
-    lockCalendar(true);
-
-    membershipName.value = currentAccount.login;
-    if (workshopSearch) workshopSearch.value = '';
-    setHint(workshopHint, '');
-    workshopCreateWrap.classList.add('hidden');
-    addWsWrap.classList.add('hidden');
-    backToCalendarBtn.classList.toggle('hidden', !(returnToCalendar && currentWorkshop));
-
-    await loadAvailableWorkshops();
-
-    if (availableWorkshops.length > 0) {
-      myWsListWrap.classList.remove('hidden');
-      myWsSearch.value = '';
-      renderMyWsList();
-    } else {
-      myWsListWrap.classList.add('hidden');
-      addWsWrap.classList.remove('hidden');
-      await loadWorkshops();
-    }
-  }
-  function showLoggedIn() {
-    loadingBlock.classList.add('hidden');
-    accountBlock.classList.add('hidden');
-    workshopBlock.classList.add('hidden');
-    loggedBar.classList.remove('hidden');
-    lockCalendar(false);
-    const admin = isAdmin();
-    loggedBar.classList.toggle('admin', admin);
-    loggedName.textContent = (admin ? '👑 ' : '') + currentMembership.name;
-    loggedWorkshop.textContent = (isCreator() ? 'Создатель' : admin ? 'Админ' : 'Рабочий') + ' · ' + currentWorkshop.name;
-    if (currentAccount.phone) {
-      loggedPhone.classList.remove('hidden');
-      loggedPhone.textContent = '📱 ' + formatPhone(currentAccount.phone);
-      loggedPhone.classList.add('copyable');
-      loggedPhone.onclick = () => copyPhone(currentAccount.phone);
-    } else {
-      loggedPhone.classList.add('hidden');
-      loggedPhone.onclick = null;
-    }
-    
-    scheduleBtn.style.display = 'inline-block';
-    scheduleBtn.textContent = admin ? '📊 Управление' : '📅 График';
-
-    subscribeMarks();
-    subscribeMsgCounts();
-    subscribeEvents();
-    subscribeSettings();
-  }
-
-  function saveSession() {
-    localStorage.setItem('cal_acc_json', JSON.stringify(currentAccount));
-    localStorage.setItem('cal_ws_json', JSON.stringify(currentWorkshop));
-    localStorage.setItem('cal_mem_json', JSON.stringify(currentMembership));
-  }
-  function clearSession() {
-    ['cal_acc_json','cal_ws_json','cal_mem_json'].forEach(k => localStorage.removeItem(k));
-  }
-  async function restoreSession() {
-    const accJson = localStorage.getItem('cal_acc_json');
-    const wsJson = localStorage.getItem('cal_ws_json');
-    const memJson = localStorage.getItem('cal_mem_json');
-    if (!accJson) { showAccountStep(); return; }
-    try {
-      currentAccount = JSON.parse(accJson);
-      const accSnap = await get(child(ref(db), `accounts/${currentAccount.key}`));
-      if (!accSnap.exists()) { clearSession(); showAccountStep(); return; }
-      const a = accSnap.val();
-      currentAccount = { key: currentAccount.key, login: a.login, phone: a.phone || '', maxUsername: a.maxUsername || '' };
-      if (wsJson && memJson) {
-        currentWorkshop = JSON.parse(wsJson);
-        currentMembership = JSON.parse(memJson);
-        const mSnap = await get(child(ref(db), `memberships/${currentWorkshop.key}/${currentAccount.key}`));
-        if (mSnap.exists()) {
-          currentMembership = mSnap.val();
-          const wSnap = await get(child(ref(db), `workshops/${currentWorkshop.key}`));
-          if (wSnap.exists()) {
-            const w = wSnap.val();
-            currentWorkshop = { key: currentWorkshop.key, name: w.name, createdBy: w.createdBy, maxChat: w.maxChat || '' };
-            saveSession();
-            showLoggedIn();
-            return;
-          }
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
         }
-      }
-      showWorkshopStep(false);
-    } catch (e) { console.error(e); showAccountStep(); }
-  }
-
-  async function registerAccount() {
-    const login = accLogin.value.trim();
-    const password = accPass.value;
-    if (!login || password.length < 3) { setHint(accHint, 'Логин и пароль минимум 3 символа', true); return; }
-    const loginKey = safeKey(login);
-    try {
-      const snap = await get(child(ref(db), `accountLogins/${loginKey}`));
-      if (snap.exists()) { setHint(accHint, 'Такой логин уже занят', true); return; }
-      const phone = normalizePhone(accPhone.value);
-      const maxU = cleanMax(accMax.value);
-      const accKey = loginKey;
-      await set(ref(db, `accounts/${accKey}`), {
-        login, passHash: await sha256(password), phone, maxUsername: maxU, createdAt: Date.now()
-      });
-      await set(ref(db, `accountLogins/${loginKey}`), accKey);
-      currentAccount = { key: accKey, login, phone, maxUsername: maxU };
-      saveSession();
-      showWorkshopStep(false);
-    } catch (e) { setHint(accHint, 'Ошибка сети', true); console.error(e); }
-  }
-
-  async function loginAccount() {
-    const login = accLogin.value.trim();
-    const password = accPass.value;
-    if (!login || !password) { setHint(accHint, 'Введите логин и пароль', true); return; }
-    const loginKey = safeKey(login);
-    try {
-      const accKeySnap = await get(child(ref(db), `accountLogins/${loginKey}`));
-      if (!accKeySnap.exists()) { setHint(accHint, 'Неверный логин или пароль', true); return; }
-      const accKey = accKeySnap.val();
-      const accSnap = await get(child(ref(db), `accounts/${accKey}`));
-      if (!accSnap.exists()) { setHint(accHint, 'Неверный логин или пароль', true); return; }
-      const a = accSnap.val();
-      if (a.passHash !== await sha256(password)) { setHint(accHint, 'Неверный логин или пароль', true); return; }
-      currentAccount = { key: accKey, login: a.login, phone: a.phone || '', maxUsername: a.maxUsername || '' };
-      saveSession();
-      showWorkshopStep(false);
-    } catch (e) { setHint(accHint, 'Ошибка сети', true); console.error(e); }
-  }
-
-  async function loadAvailableWorkshops() {
-    availableWorkshops = [];
-    try {
-      const snap = await get(child(ref(db), `userWorkshops/${currentAccount.key}`));
-      if (!snap.exists()) return;
-      const data = snap.val();
-      const wsKeys = Object.keys(data);
-      if (wsKeys.length === 0) return;
-
-      const wsSnap = await get(child(ref(db), 'workshops'));
-      const wsData = wsSnap.exists() ? wsSnap.val() : {};
-      const memSnap = await get(child(ref(db), `memberships`));
-      const memData = memSnap.exists() ? memSnap.val() : {};
-
-      availableWorkshops = wsKeys
-        .filter(k => wsData[k])
-        .map(k => ({
-          key: k,
-          name: wsData[k].name || k,
-          myName: (memData[k] && memData[k][currentAccount.key] && memData[k][currentAccount.key].name) || '',
-          role: (memData[k] && memData[k][currentAccount.key] && memData[k][currentAccount.key].role) || 'worker',
-          createdBy: wsData[k].createdBy || null
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-    } catch (e) { console.error(e); }
-  }
-
-  function renderMyWsList() {
-    myWsList.innerHTML = '';
-    const q = (myWsSearch.value || '').trim().toLowerCase();
-    const filtered = q
-      ? availableWorkshops.filter(w =>
-          w.name.toLowerCase().includes(q) ||
-          (w.myName || '').toLowerCase().includes(q))
-      : availableWorkshops;
-
-    if (filtered.length === 0) {
-      myWsList.innerHTML = '<div class="empty">Ничего не найдено</div>';
-      return;
-    }
-
-    filtered.forEach(w => {
-      const isOwner = w.createdBy === currentAccount.key;
-      const el = document.createElement('div');
-      el.className = 'item';
-
-      const left = document.createElement('div');
-      left.className = 'left';
-      const nm = document.createElement('div');
-      nm.className = 'nm';
-      nm.textContent = (isOwner ? '👑 ' : '') + w.name;
-      const rl = document.createElement('div');
-      rl.className = 'rl';
-      rl.textContent = (w.myName || currentAccount.login) + ' · ' +
-        (isOwner ? 'создатель' : w.role === 'admin' ? 'админ' : 'рабочий');
-      left.appendChild(nm); left.appendChild(rl);
-      el.appendChild(left);
-
-      const btn = document.createElement('button');
-      btn.className = 'enter';
-      btn.textContent = 'Войти';
-      btn.addEventListener('click', (e) => { e.stopPropagation(); enterWorkshopNoPass(w); });
-      el.appendChild(btn);
-
-      el.addEventListener('click', () => enterWorkshopNoPass(w));
-      myWsList.appendChild(el);
-    });
-  }
-
-  async function enterWorkshopNoPass(w) {
-    setHint(workshopHint, '');
-    try {
-      const memSnap = await get(child(ref(db), `memberships/${w.key}/${currentAccount.key}`));
-      if (!memSnap.exists()) {
-        await remove(ref(db, `userWorkshops/${currentAccount.key}/${w.key}`));
-        setHint(workshopHint, 'Цех больше недоступен', true);
-        await showWorkshopStep(false);
-        return;
-      }
-      const wSnap = await get(child(ref(db), `workshops/${w.key}`));
-      if (!wSnap.exists()) {
-        await remove(ref(db, `userWorkshops/${currentAccount.key}/${w.key}`));
-        setHint(workshopHint, 'Цех больше не существует', true);
-        await showWorkshopStep(false);
-        return;
-      }
-      const wd = wSnap.val();
-      const m = memSnap.val();
-      currentWorkshop = { key: w.key, name: wd.name, createdBy: wd.createdBy, maxChat: wd.maxChat || '' };
-      currentMembership = { name: m.name, role: m.role || 'worker', joinedAt: m.joinedAt || Date.now() };
-      saveSession();
-      showLoggedIn();
-    } catch (e) {
-      setHint(workshopHint, 'Ошибка сети', true);
-      console.error(e);
-    }
-  }
-
-  async function loadWorkshops() {
-    try {
-      const snap = await get(child(ref(db), 'workshops'));
-      if (!snap.exists()) {
-        allWorkshopsList = [];
-        applyWorkshopFilter('');
-        workshopEnterBtn.disabled = true;
-        return;
-      }
-      const data = snap.val();
-      allWorkshopsList = Object.keys(data).map(key => ({
-        key,
-        name: data[key].name || key
-      }));
-      allWorkshopsList.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-      applyWorkshopFilter(workshopSearch ? workshopSearch.value : '');
-      workshopEnterBtn.disabled = false;
-    } catch (e) { console.error(e); }
-  }
-
-  function applyWorkshopFilter(q) {
-    q = (q || '').trim().toLowerCase();
-    workshopSelect.innerHTML = '';
-    const filtered = q
-      ? allWorkshopsList.filter(w => w.name.toLowerCase().includes(q))
-      : allWorkshopsList;
-
-    if (filtered.length === 0) {
-      const o = document.createElement('option');
-      o.value = '';
-      o.textContent = allWorkshopsList.length === 0
-        ? '— нет цехов, создайте первый —'
-        : '— ничего не найдено —';
-      workshopSelect.appendChild(o);
-      workshopEnterBtn.disabled = true;
-      return;
-    }
-    filtered.forEach(w => {
-      const o = document.createElement('option');
-      o.value = w.key;
-      o.textContent = w.name;
-      workshopSelect.appendChild(o);
-    });
-    workshopEnterBtn.disabled = false;
-  }
-
-  async function enterWorkshop() {
-    const key = workshopSelect.value;
-    const password = workshopPass.value;
-    const myName = membershipName.value.trim();
-    if (!key) { setHint(workshopHint, 'Выберите цех', true); return; }
-    if (!password) { setHint(workshopHint, 'Введите пароль цеха', true); return; }
-    if (!myName || myName.length < 2) { setHint(workshopHint, 'Введите имя в цехе (мин. 2 символа)', true); return; }
-    try {
-      const wSnap = await get(child(ref(db), `workshops/${key}`));
-      if (!wSnap.exists()) { setHint(workshopHint, 'Цех не найден', true); return; }
-      const w = wSnap.val();
-      if (w.passHash !== await sha256(password)) { setHint(workshopHint, 'Неверный пароль цеха', true); return; }
-      const membersSnap = await get(child(ref(db), `memberships/${key}`));
-      const members = membersSnap.exists() ? membersSnap.val() : {};
-      const nameTaken = Object.entries(members).some(([accKey, m]) =>
-        m.name.trim().toLowerCase() === myName.toLowerCase() && accKey !== currentAccount.key);
-      if (nameTaken) { setHint(workshopHint, 'Такое имя уже занято в этом цехе', true); return; }
-
-      const existing = members[currentAccount.key];
-      const role = existing ? (existing.role || 'worker') : 'worker';
-      const mem = { name: myName, role, joinedAt: existing ? existing.joinedAt : Date.now() };
-      await set(ref(db, `memberships/${key}/${currentAccount.key}`), mem);
-      await set(ref(db, `userWorkshops/${currentAccount.key}/${key}`), true);
-      currentWorkshop = { key, name: w.name, createdBy: w.createdBy, maxChat: w.maxChat || '' };
-      currentMembership = mem;
-      workshopPass.value = '';
-      saveSession();
-      showLoggedIn();
-    } catch (e) { setHint(workshopHint, 'Ошибка сети', true); console.error(e); }
-  }
-
-  async function createWorkshop() {
-    const line = newWorkshopLine.value.trim();
-    if (!line) { setHint(workshopHint, 'Введите название цеха и пароль через пробел', true); return; }
-    const spaceIdx = line.indexOf(' ');
-    if (spaceIdx < 1) { setHint(workshopHint, 'Формат: Название пароль (через пробел)', true); return; }
-    const name = line.slice(0, spaceIdx).trim();
-    const password = line.slice(spaceIdx + 1).trim();
-    if (name.length < 2) { setHint(workshopHint, 'Название мин. 2 символа', true); return; }
-    if (password.length < 3) { setHint(workshopHint, 'Пароль мин. 3 символа', true); return; }
-
-    const key = safeKey(name);
-    try {
-      const snap = await get(child(ref(db), `workshops/${key}`));
-      if (snap.exists()) { setHint(workshopHint, 'Цех с таким названием уже есть', true); return; }
-      await set(ref(db, `workshops/${key}`), {
-        name, passHash: await sha256(password),
-        maxChat: '', createdBy: currentAccount.key, createdAt: Date.now(),
-        settings: { showApprovedInCalendar: true }
-      });
-      const myName = currentAccount.login;
-      const mem = { name: myName, role: 'admin', joinedAt: Date.now() };
-      await set(ref(db, `memberships/${key}/${currentAccount.key}`), mem);
-      await set(ref(db, `userWorkshops/${currentAccount.key}/${key}`), true);
-      currentWorkshop = { key, name, createdBy: currentAccount.key, maxChat: '' };
-      currentMembership = mem;
-      newWorkshopLine.value = '';
-      saveSession();
-      showLoggedIn();
-      setTimeout(() => alert('👑 Вы создали цех «' + name + '» и стали его администратором.'), 200);
-    } catch (e) { setHint(workshopHint, 'Ошибка сети', true); console.error(e); }
-  }
-
-  function backToAccount() {
-    unsubscribeAll();
-    currentAccount = null; currentWorkshop = null; currentMembership = null;
-    allMarks = {}; msgCounts = {}; unseenByDay = {};
-    availableWorkshops = [];
-    clearSession();
-    showAccountStep();
-  }
-  function backToCalendar() {
-    if (!currentWorkshop || !currentMembership) {
-      showWorkshopStep(false);
-      return;
-    }
-    showLoggedIn();
-  }
-
-  async function openWsModal() {
-    wsModalList.innerHTML = '<div class="empty">Загрузка…</div>';
-    wsModal.classList.add('open');
-    wsModalSearch.value = '';
-    try {
-      const snap = await get(child(ref(db), 'memberships'));
-      const all = snap.exists() ? snap.val() : {};
-      const mine = [];
-      Object.keys(all).forEach(wsKey => {
-        if (all[wsKey] && all[wsKey][currentAccount.key]) {
-          mine.push({ key: wsKey, ...all[wsKey][currentAccount.key] });
-        }
-      });
-      const wsSnap = await get(child(ref(db), 'workshops'));
-      const wsData = wsSnap.exists() ? wsSnap.val() : {};
-      myWorkshops = mine.map(m => ({
-        key: m.key,
-        name: (wsData[m.key] && wsData[m.key].name) || m.key,
-        role: m.role || 'worker',
-        myName: m.name,
-        createdBy: wsData[m.key] ? wsData[m.key].createdBy : null,
-        maxChat: wsData[m.key] ? (wsData[m.key].maxChat || '') : ''
-      }));
-      myWorkshops.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-      renderWsModal();
-    } catch (e) {
-      wsModalList.innerHTML = '<div class="empty" style="color:#d32f2f;">Ошибка загрузки</div>';
-      console.error(e);
-    }
-  }
-  function renderWsModal() {
-    wsModalList.innerHTML = '';
-    const q = (wsModalSearch.value || '').trim().toLowerCase();
-
-    if (myWorkshops.length === 0) {
-      wsModalList.innerHTML = '<div class="empty">Вы пока не вошли ни в один цех.<br>Нажмите «+ Войти в новый цех» ниже.</div>';
-      return;
-    }
-
-    const filtered = q
-      ? myWorkshops.filter(w =>
-          w.name.toLowerCase().includes(q) ||
-          (w.myName || '').toLowerCase().includes(q))
-      : myWorkshops;
-
-    if (filtered.length === 0) {
-      wsModalList.innerHTML = '<div class="empty-search">Ничего не найдено по запросу «' + escapeHtml(q) + '»</div>';
-      return;
-    }
-
-    filtered.forEach(w => {
-      const isCur = currentWorkshop && w.key === currentWorkshop.key;
-      const isOwner = w.createdBy === currentAccount.key;
-      const el = document.createElement('div');
-      el.className = 'item' + (isCur ? ' cur' : '');
-      const left = document.createElement('div');
-      left.className = 'left';
-      const nm = document.createElement('div');
-      nm.className = 'nm';
-      nm.textContent = (isOwner ? '👑 ' : '') + w.name;
-      const rl = document.createElement('div');
-      rl.className = 'rl';
-      rl.textContent = w.myName + ' · ' + (isOwner ? 'создатель' : w.role === 'admin' ? 'админ' : 'рабочий');
-      left.appendChild(nm); left.appendChild(rl);
-      el.appendChild(left);
-
-      const right = document.createElement('div');
-      right.style.display = 'flex';
-      right.style.alignItems = 'center';
-      right.style.gap = '8px';
-      right.style.flexShrink = '0';
-
-      if (isCur) {
-        const check = document.createElement('div');
-        check.className = 'check';
-        check.textContent = '✓';
-        right.appendChild(check);
-      }
-      if (isOwner) {
-        const delBtn = document.createElement('button');
-        delBtn.className = 'del-btn';
-        delBtn.textContent = '🗑';
-        delBtn.title = 'Удалить цех (только создатель)';
-        delBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          askDeleteWorkshop(w);
-        });
-        right.appendChild(delBtn);
-      }
-      el.appendChild(right);
-
-      el.addEventListener('click', () => switchWorkshop(w));
-      wsModalList.appendChild(el);
-    });
-  }
-  async function switchWorkshop(w) {
-    if (currentWorkshop && w.key === currentWorkshop.key) {
-      closeWsModal();
-      return;
-    }
-    unsubscribeAll();
-    currentWorkshop = { key: w.key, name: w.name, createdBy: w.createdBy, maxChat: w.maxChat };
-    currentMembership = { name: w.myName, role: w.role, joinedAt: Date.now() };
-    saveSession();
-    closeWsModal();
-    showLoggedIn();
-  }
-  function closeWsModal() { wsModal.classList.remove('open'); }
-  function wsModalAddNew() {
-    closeWsModal();
-    showWorkshopStep(true);
-  }
-
-  function askDeleteWorkshop(w) {
-    if (!currentAccount || w.createdBy !== currentAccount.key) {
-      alert('Удалять цех может только его создатель.');
-      return;
-    }
-    pendingDeleteWs = w;
-    delModalName.textContent = w.name;
-    delModal.classList.add('open');
-  }
-  function closeDelModal() {
-    delModal.classList.remove('open');
-    pendingDeleteWs = null;
-    delModalConfirm.disabled = false;
-    delModalConfirm.textContent = 'Удалить навсегда';
-  }
-  async function confirmDeleteWorkshop() {
-    if (!pendingDeleteWs) return;
-    const w = pendingDeleteWs;
-    if (!currentAccount || w.createdBy !== currentAccount.key) {
-      alert('Удалять цех может только его создатель.');
-      closeDelModal();
-      return;
-    }
-    delModalConfirm.disabled = true;
-    delModalConfirm.textContent = 'Удаление…';
-    try {
-      const memSnap = await get(child(ref(db), `memberships/${w.key}`));
-      if (memSnap.exists()) {
-        const mems = memSnap.val();
-        const updates = {};
-        Object.keys(mems).forEach(accKey => {
-          updates[`userWorkshops/${accKey}/${w.key}`] = null;
-        });
-        if (Object.keys(updates).length) await update(ref(db), updates);
-      }
-
-      await remove(ref(db, `workshops/${w.key}`));
-      await remove(ref(db, `memberships/${w.key}`));
-      await remove(ref(db, `marks/${w.key}`));
-      await remove(ref(db, `messages/${w.key}`));
-      await remove(ref(db, `dayEvents/${w.key}`));
-      await remove(ref(db, `dayEventsSeen/${w.key}`));
-      await remove(ref(db, `preferences/${w.key}`));
-      await remove(ref(db, `locks/${w.key}`));
-
-      const wasCurrent = currentWorkshop && currentWorkshop.key === w.key;
-      closeDelModal();
-
-      if (wasCurrent) {
-        unsubscribeAll();
-        currentWorkshop = null;
-        currentMembership = null;
-        allMarks = {}; msgCounts = {}; unseenByDay = {};
-        localStorage.removeItem('cal_ws_json');
-        localStorage.removeItem('cal_mem_json');
-
-        const snap = await get(child(ref(db), 'memberships'));
-        const all = snap.exists() ? snap.val() : {};
-        let nextKey = null;
-        Object.keys(all).forEach(k => {
-          if (!nextKey && all[k] && all[k][currentAccount.key]) nextKey = k;
-        });
-        if (nextKey) {
-          const m = all[nextKey][currentAccount.key];
-          const wSnap = await get(child(ref(db), `workshops/${nextKey}`));
-          if (wSnap.exists()) {
-            const wd = wSnap.val();
-            currentWorkshop = { key: nextKey, name: wd.name, createdBy: wd.createdBy, maxChat: wd.maxChat || '' };
-            currentMembership = { name: m.name, role: m.role || 'worker', joinedAt: m.joinedAt || Date.now() };
-            saveSession();
-            closeWsModal();
-            showLoggedIn();
-            return;
-          }
-        }
-        closeWsModal();
-        showWorkshopStep(false);
-        return;
-      }
-
-      await openWsModal();
-    } catch (e) {
-      console.error(e);
-      alert('Ошибка удаления: ' + (e.message || e));
-      closeDelModal();
-    }
-  }
-
-  function unsubscribeAll() {
-    if (unsubMarks) { unsubMarks(); unsubMarks = null; }
-    if (unsubMsgCounts) { unsubMsgCounts(); unsubMsgCounts = null; }
-    if (unsubEvents) { unsubEvents(); unsubEvents = null; }
-    if (unsubModalMsgs) { unsubModalMsgs(); unsubModalMsgs = null; }
-    if (unsubSettings) { unsubSettings(); unsubSettings = null; }
-  }
-
-  function subscribeMarks() {
-    if (unsubMarks) unsubMarks();
-    unsubMarks = onValue(ref(db, `marks/${currentWorkshop.key}`), snap => {
-      allMarks = snap.val() || {};
-      renderCalendar();
-    });
-  }
-  function subscribeMsgCounts() {
-    if (unsubMsgCounts) unsubMsgCounts();
-    unsubMsgCounts = onValue(ref(db, `messages/${currentWorkshop.key}`), snap => {
-      const data = snap.val() || {};
-      msgCounts = {};
-      Object.keys(data).forEach(day => { msgCounts[day] = Object.keys(data[day] || {}).length; });
-      renderCalendar();
-    });
-  }
-  function subscribeEvents() {
-    if (unsubEvents) unsubEvents();
-    unsubEvents = onValue(ref(db, `dayEvents/${currentWorkshop.key}`), async snap => {
-      const data = snap.val() || {};
-      const seenSnap = await get(child(ref(db), `dayEventsSeen/${currentWorkshop.key}`));
-      const seen = seenSnap.exists() ? seenSnap.val() : {};
-      const unseen = {};
-      Object.keys(data).forEach(day => {
-        Object.keys(data[day] || {}).forEach(evId => {
-          const ev = data[day][evId];
-          if (ev.actorKey === currentAccount.key) return;
-          const seenForEv = (seen[day] && seen[day][evId]) || {};
-          if (!seenForEv[currentAccount.key]) unseen[day] = (unseen[day] || 0) + 1;
-        });
-      });
-      unseenByDay = unseen;
-      renderCalendar();
-    });
-  }
-  function subscribeSettings() {
-    if (unsubSettings) unsubSettings();
-    unsubSettings = onValue(ref(db, `workshops/${currentWorkshop.key}/settings`), snap => {
-      const s = snap.val() || {};
-      workshopSettings = {
-        showApprovedInCalendar: s.showApprovedInCalendar !== false
-      };
-      applySettingsToUI();
-      renderCalendar();
-    });
-  }
-  function applySettingsToUI() {
-    daysEl.classList.toggle('hide-approved', !workshopSettings.showApprovedInCalendar);
-  }
-
-  async function toggleDay(key) {
-    if (!currentAccount || !currentWorkshop) return;
-    const markRef = ref(db, `marks/${currentWorkshop.key}/${key}/${currentAccount.key}`);
-    const snap = await get(markRef);
-    if (snap.exists()) {
-      const evRef = push(ref(db, `dayEvents/${currentWorkshop.key}/${key}`));
-      await update(evRef, {
-        kind: 'removed',
-        actorKey: currentAccount.key,
-        actorName: currentMembership.name,
-        createdAt: Date.now()
-      });
-      await set(ref(db, `dayEventsSeen/${currentWorkshop.key}/${key}/${evRef.key}/${currentAccount.key}`), true);
-      await remove(markRef);
-    } else {
-      const status = isAdmin() ? 'approved' : 'pending';
-      await set(markRef, {
-        name: currentMembership.name,
-        phone: currentAccount.phone || '',
-        maxUsername: currentAccount.maxUsername || '',
-        role: isCreator() ? 'admin' : (currentMembership.role || 'worker'),
-        status,
-        updatedAt: Date.now()
-      });
-    }
-  }
-
-  async function setStatus(userKey, day, status) {
-    if (!isAdmin()) return;
-    await update(ref(db, `marks/${currentWorkshop.key}/${day}/${userKey}`), { status });
-  }
-  async function toggleRole(userKey) {
-    if (!isCreator()) return;
-    const memRef = ref(db, `memberships/${currentWorkshop.key}/${userKey}`);
-    const snap = await get(memRef);
-    if (!snap.exists()) return;
-    const m = snap.val();
-    const newRole = m.role === 'admin' ? 'worker' : 'admin';
-    await update(memRef, { role: newRole });
-  }
-
-  function renderCalendar() {
-    daysEl.innerHTML = '';
-    monthYear.textContent = `${monthNames[currentMonth]} ${currentYear}`;
-    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
-    const offset = firstDay === 0 ? 6 : firstDay - 1;
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-
-    for (let i = 0; i < offset; i++) {
-      const e = document.createElement('div');
-      e.classList.add('day', 'empty'); daysEl.appendChild(e);
-    }
-
-    const hideApproved = !workshopSettings.showApprovedInCalendar;
-
-    for (let d = 1; d <= daysInMonth; d++) {
-      const key = dayKey(currentYear, currentMonth, d);
-      const users = allMarks[key] || {};
-      const entries = Object.entries(users);
-      const approved = entries.filter(([, u]) => u.status === 'approved');
-      const pending  = entries.filter(([, u]) => u.status === 'pending');
-      const rejected = entries.filter(([, u]) => u.status === 'rejected');
-      const myEntry = currentAccount ? users[currentAccount.key] : null;
-      const myStatus = myEntry ? myEntry.status : null;
-
-      const dayEl = document.createElement('div');
-      dayEl.className = 'day';
-      if (d === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear())
-        dayEl.classList.add('today');
-
-      if (!hideApproved && approved.length > 0) {
-        dayEl.classList.add(myStatus === 'approved' ? 'mine' : 'has-users');
-      } else if (pending.length > 0) {
-        dayEl.classList.add(myStatus === 'pending' ? 'mine-pending' : 'has-pending');
-      } else if (rejected.length > 0) {
-        dayEl.classList.add(myStatus === 'rejected' ? 'mine-pending' : 'has-pending');
-      }
-
-      if (unseenByDay[key]) dayEl.classList.add('unseen-flash');
-
-      const num = document.createElement('div');
-      num.className = 'num'; num.textContent = d;
-      dayEl.appendChild(num);
-
-      const topRight = document.createElement('div');
-      topRight.className = 'top-right';
-
-      if (pending.length > 0) {
-        const badge = document.createElement('div');
-        badge.className = 'pend-badge' + (isAdmin() ? ' admin' : '');
-        badge.textContent = '⏳' + pending.length;
-        topRight.appendChild(badge);
-      }
-
-      const countEl = document.createElement('div');
-      countEl.className = 'people-count' + (approved.length === 0 || hideApproved ? ' zero' : '');
-      if (approved.length > 0 && !hideApproved) {
-        const n = document.createElement('span'); n.textContent = approved.length; countEl.appendChild(n);
-        const u = document.createElement('span'); u.className = 'u'; u.textContent = 'чел'; countEl.appendChild(u);
-      } else countEl.textContent = '0';
-      topRight.appendChild(countEl);
-      dayEl.appendChild(topRight);
-
-      const showEntries = hideApproved ? [] : [...approved];
-      if (myEntry && myEntry.status === 'pending') showEntries.push([currentAccount.key, myEntry]);
-      if (myEntry && myEntry.status === 'rejected') showEntries.push([currentAccount.key, myEntry]);
-
-      if (showEntries.length > 0) {
-        const namesBox = document.createElement('div');
-        namesBox.className = 'names';
-        const maxShow = 2;
-        showEntries.slice(0, maxShow).forEach(([uid, info]) => {
-          const w = document.createElement('div');
-          w.className = 'who';
-          
-          let shiftPrefix = '';
-          if (info.shift === 0) shiftPrefix = 'Д ';
-          else if (info.shift === 1) shiftPrefix = 'Н ';
-          
-          const nm = (info.name || '').split(/\s+/)[0];
-          const pref = (info.status === 'pending' ? '⏳ ' : info.status === 'rejected' ? '✗ ' : '');
-          const txt = pref + shiftPrefix + nm;
-          w.textContent = txt.length > 10 ? txt.slice(0, 10) + '…' : txt;
-          namesBox.appendChild(w);
-        });
-        if (showEntries.length > maxShow) {
-          const m = document.createElement('div');
-          m.className = 'more';
-          m.textContent = `+${showEntries.length - maxShow}`;
-          namesBox.appendChild(m);
-        }
-        dayEl.appendChild(namesBox);
-      }
-
-      const dots = document.createElement('div');
-      dots.className = 'dots';
-      if (!hideApproved && approved.length > 0) { const dd = document.createElement('div'); dd.className = 'dot'; dots.appendChild(dd); }
-      if (pending.length > 0)  { const dd = document.createElement('div'); dd.className = 'dot pending'; dots.appendChild(dd); }
-      if (rejected.length > 0) { const dd = document.createElement('div'); dd.className = 'dot rejected'; dots.appendChild(dd); }
-      if (dots.children.length > 0) dayEl.appendChild(dots);
-
-      const t = document.createElement('div');
-      t.className = 'toggle-btn';
-      t.textContent = myStatus ? '−' : '+';
-      t.addEventListener('click', e => { e.stopPropagation(); toggleDay(key); });
-      dayEl.appendChild(t);
-
-      const msgCount = msgCounts[key] || 0;
-      const c = document.createElement('div');
-      c.className = 'chat-btn' + (msgCount > 0 ? ' has-msg' : '');
-      c.innerHTML = '💬' + (msgCount > 0 ? `<span class="badge">${msgCount}</span>` : '');
-      c.addEventListener('click', e => { e.stopPropagation(); openModal(key, d, true); });
-      dayEl.appendChild(c);
-
-      dayEl.addEventListener('click', () => openModal(key, d, false));
-      daysEl.appendChild(dayEl);
-    }
-  }
-
-  function makeUserLi(uid, info, opts) {
-    opts = opts || {};
-    const isMe = currentAccount && uid === currentAccount.key;
-    const li = document.createElement('li');
-    if (isMe) li.classList.add('me');
-    li.classList.add(info.status === 'approved' ? 'approved' : info.status === 'pending' ? 'pending' : 'rejected');
-
-    const av = document.createElement('span');
-    av.className = 'avatar'; av.textContent = initials(info.name);
-    li.appendChild(av);
-
-    const infoBox = document.createElement('div');
-    infoBox.className = 'u-info';
-
-    const n = document.createElement('div');
-    n.className = 'u-name';
-    let shiftLabel = '';
-    if (info.shift === 0) shiftLabel = '<span style="color:#e65100; margin-right:4px;">[День]</span>';
-    if (info.shift === 1) shiftLabel = '<span style="color:#1565c0; margin-right:4px;">[Ночь]</span>';
-    
-    n.innerHTML = (info.role === 'admin' ? '<span class="crown">👑</span> ' : '') +
-      shiftLabel + escapeHtml(info.name || '?') + (isMe ? ' (вы)' : '');
-    infoBox.appendChild(n);
-
-    const ph = document.createElement('div');
-    if (info.phone) {
-      ph.className = 'u-phone copyable';
-      ph.textContent = '📱 ' + formatPhone(info.phone);
-      ph.title = 'Нажмите, чтобы скопировать';
-      ph.addEventListener('click', (e) => { e.stopPropagation(); copyPhone(info.phone); });
-    } else {
-      ph.className = 'u-phone empty';
-      ph.textContent = 'телефон не указан';
-    }
-    infoBox.appendChild(ph);
-
-    if (info.maxUsername) {
-      const mx = document.createElement('div');
-      mx.className = 'u-phone';
-      mx.textContent = 'MAX: ' + info.maxUsername;
-      infoBox.appendChild(mx);
-    }
-    li.appendChild(infoBox);
-
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-
-    if (info.status === 'approved') {
-      const st = document.createElement('span'); st.className = 'status-badge approved'; st.textContent = '✅ В смене';
-      actions.appendChild(st);
-    }
-    if (info.status === 'rejected') {
-      const st = document.createElement('span'); st.className = 'status-badge rejected'; st.textContent = '✗ Отклонена';
-      actions.appendChild(st);
-    }
-
-    if (opts.showApproveReject && info.status === 'pending') {
-      const btnOk = document.createElement('button');
-      btnOk.className = 'btn-approve'; btnOk.textContent = '✓ Одобрить';
-      btnOk.addEventListener('click', () => setStatus(uid, openDayKey, 'approved'));
-      actions.appendChild(btnOk);
-      const btnNo = document.createElement('button');
-      btnNo.className = 'btn-reject'; btnNo.textContent = '✗ Отклонить';
-      btnNo.addEventListener('click', () => setStatus(uid, openDayKey, 'rejected'));
-      actions.appendChild(btnNo);
-    }
-    if (opts.showRestore && info.status === 'rejected') {
-      const btnOk = document.createElement('button');
-      btnOk.className = 'btn-approve'; btnOk.textContent = '✓ Вернуть';
-      btnOk.addEventListener('click', () => setStatus(uid, openDayKey, 'approved'));
-      actions.appendChild(btnOk);
-    }
-    if (opts.showRoleToggle && isCreator() && !isMe) {
-      const btnR = document.createElement('button');
-      btnR.className = 'btn-role'; btnR.textContent = info.role === 'admin' ? '👑 → 👤' : '👤 → 👑';
-      btnR.addEventListener('click', () => toggleRole(uid));
-      actions.appendChild(btnR);
-    }
-    if (info.maxUsername) {
-      const mx = document.createElement('a');
-      mx.className = 'max-btn';
-      mx.href = maxUrl(info.maxUsername);
-      mx.target = '_blank'; mx.rel = 'noopener';
-      mx.textContent = 'MAX';
-      actions.appendChild(mx);
-    }
-
-    if (actions.children.length > 0) li.appendChild(actions);
-    return li;
-  }
-
-  function renderModalLists() {
-    if (!openDayKey) return;
-    const users = allMarks[openDayKey] || {};
-    const entries = Object.entries(users);
-    const approved = entries.filter(([, u]) => u.status === 'approved');
-    const pending  = entries.filter(([, u]) => u.status === 'pending');
-    const rejected = entries.filter(([, u]) => u.status === 'rejected');
-
-    listApproved.innerHTML = '';
-    if (approved.length === 0) {
-      const li = document.createElement('li'); li.className = 'empty';
-      li.textContent = 'Пока никто не в смене';
-      listApproved.appendChild(li);
-    } else {
-      approved.forEach(([uid, info]) =>
-        listApproved.appendChild(makeUserLi(uid, info, { showRoleToggle: true })));
-    }
-    secApproved.style.display = '';
-    cntApproved.textContent = approved.length;
-
-    if (pending.length > 0) {
-      listPending.innerHTML = '';
-      pending.forEach(([uid, info]) =>
-        listPending.appendChild(makeUserLi(uid, info, {
-          showApproveReject: isAdmin(),
-          showRoleToggle: true
-        })));
-      secPending.style.display = '';
-      cntPending.textContent = pending.length;
-    } else secPending.style.display = 'none';
-
-    if (rejected.length > 0) {
-      listRejected.innerHTML = '';
-      rejected.forEach(([uid, info]) =>
-        listRejected.appendChild(makeUserLi(uid, info, {
-          showRestore: isAdmin(),
-          showRoleToggle: true
-        })));
-      secRejected.style.display = '';
-      cntRejected.textContent = rejected.length;
-    } else secRejected.style.display = 'none';
-
-    if (approved.length + pending.length + rejected.length === 0) {
-      listApproved.innerHTML = '<li class="empty">Пока никто не отметил этот день</li>';
-      secApproved.style.display = '';
-    }
-  }
-
-  async function markDaySeen(key) {
-    try {
-      const snap = await get(child(ref(db), `dayEvents/${currentWorkshop.key}/${key}`));
-      if (!snap.exists()) return;
-      const data = snap.val();
-      const updates = {};
-      Object.keys(data).forEach(evId => {
-        const ev = data[evId];
-        if (ev.actorKey === currentAccount.key) return;
-        updates[`dayEventsSeen/${currentWorkshop.key}/${key}/${evId}/${currentAccount.key}`] = true;
-      });
-      if (Object.keys(updates).length) await update(ref(db), updates);
-    } catch (e) { console.error(e); }
-  }
-
-  function openModal(key, dayNumber, focusComposer) {
-    openDayKey = key;
-    const users = allMarks[key] || {};
-    const total = Object.keys(users).length;
-    const [y, m] = key.split('-');
-    modalTitle.textContent = total ? `День ${dayNumber} · всего ${total}` : 'День ' + dayNumber;
-    modalDate.textContent = `${dayNumber} ${monthNames[parseInt(m,10)-1]} ${y}`;
-
-    messagesList.innerHTML = '';
-    messagesEmpty.classList.add('hidden');
-    cntMessages.textContent = '0';
-    msgInput.value = '';
-    msgSend.disabled = !currentAccount;
-
-    modalSettings.style.display = isAdmin() ? 'flex' : 'none';
-    daySettings.classList.add('hidden');
-    setShowApproved.checked = workshopSettings.showApprovedInCalendar;
-
-    modalBackdrop.classList.add('open');
-    if (focusComposer) setTimeout(() => msgInput.focus(), 100);
-
-    markDaySeen(key);
-
-    if (unsubModalMsgs) unsubModalMsgs();
-    unsubModalMsgs = onValue(ref(db, `messages/${currentWorkshop.key}/${key}`), snap => {
-      const data = snap.val() || {};
-      const list = Object.entries(data)
-        .map(([id, v]) => ({ id, ...v }))
-        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-      renderMessages(list);
-    });
-
-    renderModalLists();
-    modalBody.scrollTop = 0;
-  }
-
-  function renderMessages(list) {
-    messagesList.innerHTML = '';
-    if (!list || list.length === 0) {
-      messagesEmpty.classList.remove('hidden');
-      cntMessages.textContent = '0';
-      return;
-    }
-    messagesEmpty.classList.add('hidden');
-    cntMessages.textContent = list.length;
-
-    list.forEach(m => {
-      const el = document.createElement('div');
-      el.className = 'msg' + (currentAccount && m.accountKey === currentAccount.key ? ' mine' : '');
-      const meta = document.createElement('div'); meta.className = 'meta';
-      const who = document.createElement('span'); who.className = 'who';
-      who.textContent = (m.role === 'admin' ? '👑 ' : '') + m.userName;
-      meta.appendChild(who);
-      if (m.phone) {
-        const ph = document.createElement('span');
-        ph.className = 'copyable';
-        ph.textContent = '· ' + formatPhone(m.phone);
-        ph.title = 'Нажмите, чтобы скопировать';
-        ph.addEventListener('click', (e) => { e.stopPropagation(); copyPhone(m.phone); });
-        meta.appendChild(ph);
-      }
-      if (m.maxUsername) { const mx = document.createElement('span'); mx.textContent = '· MAX: ' + m.maxUsername; meta.appendChild(mx); }
-      const t = document.createElement('span'); t.textContent = '· ' + formatTime(m.createdAt); meta.appendChild(t);
-      el.appendChild(meta);
-      const txt = document.createElement('div'); txt.className = 'text'; txt.textContent = m.text; el.appendChild(txt);
-      messagesList.appendChild(el);
-    });
-
-    modalBody.scrollTop = 0;
-  }
-
-  async function sendMessage() {
-    if (!currentAccount || !openDayKey) return;
-    const text = msgInput.value.trim(); if (!text) return;
-    msgSend.disabled = true;
-    try {
-      await push(ref(db, `messages/${currentWorkshop.key}/${openDayKey}`), {
-        text,
-        accountKey: currentAccount.key,
-        userName: currentMembership.name,
-        phone: currentAccount.phone || '',
-        maxUsername: currentAccount.maxUsername || '',
-        role: isCreator() ? 'admin' : (currentMembership.role || 'worker'),
-        createdAt: Date.now()
-      });
-      msgInput.value = ''; msgInput.style.height = 'auto';
-      msgInput.focus();
-    } catch (e) { alert('Ошибка отправки'); }
-    finally { msgSend.disabled = !msgInput.value.trim(); }
-  }
-
-  function closeModal() {
-    modalBackdrop.classList.remove('open');
-    openDayKey = null;
-    if (unsubModalMsgs) { unsubModalMsgs(); unsubModalMsgs = null; }
-  }
-  modalClose.addEventListener('click', closeModal);
-  modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeModal(); });
-  msgInput.addEventListener('input', () => {
-    msgInput.style.height = 'auto';
-    msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
-    msgSend.disabled = !msgInput.value.trim() || !currentAccount;
-  });
-  msgInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!msgSend.disabled) sendMessage(); }
-  });
-  msgSend.addEventListener('click', sendMessage);
-
-  function changeMonth(delta) {
-    currentMonth += delta;
-    if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-    else if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-    renderCalendar();
-  }
-  prevBtn.addEventListener('click', () => changeMonth(-1));
-  nextBtn.addEventListener('click', () => changeMonth(1));
-
-  let tX = 0, tY = 0;
-  calendarEl.addEventListener('touchstart', e => { tX = e.touches[0].clientX; tY = e.touches[0].clientY; }, { passive: true });
-  calendarEl.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].clientX - tX;
-    const dy = e.changedTouches[0].clientY - tY;
-    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) changeMonth(dx > 0 ? -1 : 1);
-  }, { passive: true });
-
-  accLoginBtn.addEventListener('click', loginAccount);
-  accPass.addEventListener('keydown', e => { if (e.key === 'Enter') loginAccount(); });
-  accRegisterBtn.addEventListener('click', () => {
-    if (accPhoneRow.classList.contains('hidden')) {
-      accPhoneRow.classList.remove('hidden');
-      accMaxRow.classList.remove('hidden');
-      accountTitle.textContent = 'Регистрация аккаунта';
-      accLoginBtn.classList.add('hidden');
-      setHint(accHint, 'Придумайте логин и пароль (мин. 3 символа).');
-      return;
-    }
-    registerAccount();
-  });
-
-  workshopEnterBtn.addEventListener('click', enterWorkshop);
-  workshopPass.addEventListener('keydown', e => { if (e.key === 'Enter') enterWorkshop(); });
-  workshopSearch.addEventListener('input', () => applyWorkshopFilter(workshopSearch.value));
-  newWorkshopLine.addEventListener('keydown', e => { if (e.key === 'Enter') createWorkshop(); });
-  createWorkshopBtn.addEventListener('click', createWorkshop);
-  backToAccountBtn.addEventListener('click', backToAccount);
-  backToCalendarBtn.addEventListener('click', backToCalendar);
-  logoutBtn.addEventListener('click', backToAccount);
-
-  showAddWsBtn.addEventListener('click', async () => {
-    myWsListWrap.classList.add('hidden');
-    workshopCreateWrap.classList.add('hidden');
-    addWsWrap.classList.remove('hidden');
-    membershipName.value = currentAccount.login;
-    setHint(workshopHint, '');
-    await loadWorkshops();
-  });
-  cancelAddWsBtn.addEventListener('click', () => {
-    addWsWrap.classList.add('hidden');
-    workshopCreateWrap.classList.add('hidden');
-    if (availableWorkshops.length > 0) {
-      myWsListWrap.classList.remove('hidden');
-      renderMyWsList();
-    } else {
-      addWsWrap.classList.remove('hidden');
-    }
-  });
-  showCreateWorkshopBtn.addEventListener('click', () => {
-    addWsWrap.classList.add('hidden');
-    workshopCreateWrap.classList.remove('hidden');
-    setHint(workshopHint, 'Пример: Сборка 12345 — название «Сборка», пароль «12345».');
-  });
-  showJoinWorkshopBtn.addEventListener('click', async () => {
-    workshopCreateWrap.classList.add('hidden');
-    addWsWrap.classList.remove('hidden');
-    setHint(workshopHint, '');
-    await loadWorkshops();
-  });
-  myWsSearch.addEventListener('input', renderMyWsList);
-
-  switchWsBtn.addEventListener('click', openWsModal);
-  wsModalClose.addEventListener('click', closeWsModal);
-  wsModalCancelBtn.addEventListener('click', closeWsModal);
-  wsModalAddBtn.addEventListener('click', wsModalAddNew);
-  wsModalSearch.addEventListener('input', renderWsModal);
-  wsModal.addEventListener('click', e => { if (e.target === wsModal) closeWsModal(); });
-
-  delModalCancel.addEventListener('click', closeDelModal);
-  delModalConfirm.addEventListener('click', confirmDeleteWorkshop);
-  delModal.addEventListener('click', e => { if (e.target === delModal) closeDelModal(); });
-
-  modalSettings.addEventListener('click', () => {
-    if (!isAdmin()) return;
-    daySettings.classList.toggle('hidden');
-  });
-  setShowApproved.addEventListener('change', async (e) => {
-    if (!isAdmin()) { e.target.checked = !e.target.checked; return; }
-    const val = e.target.checked;
-    workshopSettings.showApprovedInCalendar = val;
-    applySettingsToUI();
-    renderCalendar();
-    try {
-      await update(ref(db, `workshops/${currentWorkshop.key}/settings`), {
-        showApprovedInCalendar: val
-      });
-    } catch (err) {
-      console.error(err);
-      alert('Не удалось сохранить настройку');
-    }
-  });
-
-  /* ====== ЛОГИКА РАСЧЁТА ГРАФИКА ====== */
-  scheduleBtn.addEventListener('click', openScheduleModal);
-  scheduleClose.addEventListener('click', () => scheduleBackdrop.classList.remove('open'));
-  scheduleBackdrop.addEventListener('click', e => { if (e.target === scheduleBackdrop) scheduleBackdrop.classList.remove('open'); });
-
-  async function openScheduleModal() {
-    schPrefs = {}; schLocks = {}; schCurrentMarks = {};
-    scheduleBackdrop.classList.add('open');
-    
-    const memSnap = await get(child(ref(db), `memberships/${currentWorkshop.key}`));
-    if (memSnap.exists()) {
-      const mems = memSnap.val();
-      schMembers = Object.keys(mems).map(k => ({ id: k, name: mems[k].name }));
-    } else { return; }
-
-    const prefSnap = await get(child(ref(db), `preferences/${currentWorkshop.key}`));
-    schPrefs = prefSnap.exists() ? prefSnap.val() : {};
-
-    const lockSnap = await get(ref(db, `locks/${currentWorkshop.key}`));
-    schLocks = lockSnap.exists() ? lockSnap.val() : {};
-
-    const cfgSnap = await get(child(ref(db), `workshops/${currentWorkshop.key}/scheduleConfig`));
-    if (cfgSnap.exists()) {
-      const cfg = cfgSnap.val();
-      $('schShiftsPerDay').value = cfg.shiftsPerDay || 2;
-      $('schPerShift').value = cfg.perShift || 4;
-    }
-
-    const markSnap = await get(child(ref(db), `marks/${currentWorkshop.key}`));
-    schCurrentMarks = markSnap.exists() ? markSnap.val() : {};
-
-    const isAdm = isAdmin();
-    schCalcBtn.style.display = isAdm ? 'inline-block' : 'none';
-    schCopyBtn.style.display = isAdm ? 'inline-block' : 'none';
-    $('schSettings').style.display = isAdm ? 'flex' : 'none';
-
-    renderScheduleGrid();
-  }
-
-  function renderScheduleGrid() {
-    const days = new Date(currentYear, currentMonth + 1, 0).getDate();
-    // Увеличили первую колонку до 200px для аккуратного размещения элементов
-    schGrid.style.gridTemplateColumns = `200px repeat(${days}, 34px)`;
-    let html = '<div></div>';
-    
-    const wdNames = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
-    for (let d = 1; d <= days; d++) {
-      const date = new Date(currentYear, currentMonth, d);
-      const wd = wdNames[date.getDay()];
-      const isWe = date.getDay() === 0 || date.getDay() === 6;
-      // В шапку добавляем число и день недели
-      html += `<div class="sch-hdr-day ${isWe?'sch-hdr-we':''}">
-        <div style="font-size: 12px; font-weight: bold; line-height: 1.1;">${d}</div>
-        <div class="sch-hdr-wd" style="color: ${isWe?'#e74c3c':'#999'};">${wd}</div>
-      </div>`;
-    }
-    
-    schMembers.forEach(emp => {
-      const isLocked = schLocks[emp.id] ? 'checked' : '';
-      const disabled = isAdmin() ? '' : 'disabled';
-      html += `<div class="sch-emp-name" title="${escapeHtml(emp.name)}">
-        <input type="checkbox" class="sch-lock" data-emp="${emp.id}" ${isLocked} ${disabled} style="width:16px; height:16px; margin:0; flex-shrink:0;">
-        <span style="flex: 1; overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(emp.name)}</span>
-        <select class="sch-emp-preset" data-emp="${emp.id}" style="font-size: 11px; padding: 2px; max-width: 55px; flex-shrink:0;">
-          <option value="">...</option>
-          <option value="4,2">2/2</option>
-          <option value="4,3">3/1</option>
-          <option value="2,1">1/1</option>
-          <option value="3,1">1/2</option>
-          <option value="7,5">5/2</option>
-        </select>
-      </div>`;
-      
-      for (let d = 1; d <= days; d++) {
-        const key = dayKey(currentYear, currentMonth, d);
-        const p = (schPrefs[emp.id] && schPrefs[emp.id][key]) || 'available';
-        // Вставляем символ в ячейку
-        html += `<div class="sch-cell ${p}" data-emp="${emp.id}" data-day="${key}">${SCH_SYMBOLS[p]}</div>`;
-      }
-    });
-    schGrid.innerHTML = html;
-
-    schGrid.querySelectorAll('.sch-cell').forEach(cell => {
-      cell.onclick = async () => {
-        const empId = cell.dataset.emp;
-        if (!isAdmin() && empId !== currentAccount.key) {
-           alert('Вы можете изменять только свои предпочтения');
-           return;
-        }
-        const key = cell.dataset.day;
-        const cur = (schPrefs[empId] && schPrefs[empId][key]) || 'available';
-        const states = ['available', 'preferred', 'unavailable', 'vacation'];
-        const next = states[(states.indexOf(cur) + 1) % states.length];
+        const safeKey = (str) => str.toLowerCase().replace(/[.#$\[\]\/]/g, '_');
         
-        if (!schPrefs[empId]) schPrefs[empId] = {};
-        schPrefs[empId][key] = next;
-        cell.className = `sch-cell ${next}`;
-        cell.textContent = SCH_SYMBOLS[next]; // Обновляем символ
-        
-        await set(ref(db, `preferences/${currentWorkshop.key}/${empId}/${key}`), next);
-      };
-    });
-
-    schGrid.querySelectorAll('.sch-lock').forEach(cb => {
-      cb.onchange = async (e) => {
-        if (!isAdmin()) return;
-        const empId = cb.dataset.emp;
-        const val = e.target.checked;
-        schLocks[empId] = val;
-        if (val) {
-          await set(ref(db, `locks/${currentWorkshop.key}/${empId}`), true);
-        } else {
-          await remove(ref(db, `locks/${currentWorkshop.key}/${empId}`));
+        let toastTimer = null;
+        function toast(msg) {
+            const el = document.getElementById('toast');
+            el.textContent = msg; el.style.opacity = '1';
+            clearTimeout(toastTimer); toastTimer = setTimeout(() => el.style.opacity = '0', 3000);
         }
-      };
-    });
-
-    schGrid.querySelectorAll('.sch-emp-preset').forEach(sel => {
-      sel.onchange = async (e) => {
-        const val = e.target.value;
-        if (!val) return;
-        const empId = sel.dataset.emp;
-        if (!isAdmin() && empId !== currentAccount.key) {
-          alert('Вы можете изменять только свои предпочтения');
-          e.target.value = '';
-          return;
+        function showError(msg) {
+            const el = document.getElementById('error-box');
+            el.textContent = msg; el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 4000);
         }
-        const [c, w] = val.split(',').map(Number);
-        applyPreset(c, w, empId);
-        e.target.value = '';
-      };
-    });
-  }
 
-  async function applyPreset(cycleLength, workDays, empId = null) {
-    if (!isAdmin() && empId !== currentAccount.key) return;
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const updates = {};
-    
-    for (let d = 1; d <= daysInMonth; d++) {
-      const key = dayKey(currentYear, currentMonth, d);
-      const isWork = ((d - 1) % cycleLength) < workDays;
-      const state = isWork ? 'preferred' : 'vacation';
-      
-      const targets = empId ? schMembers.filter(e => e.id === empId) : schMembers;
-      targets.forEach(emp => {
-        if (!schPrefs[emp.id]) schPrefs[emp.id] = {};
-        schPrefs[emp.id][key] = state;
-        updates[`preferences/${currentWorkshop.key}/${emp.id}/${key}`] = state;
-      });
-    }
-    
-    await update(ref(db), updates);
-    renderScheduleGrid(); // Перерисовываем, чтобы появились символы
-  }
+        // ==========================================
+        // 2. СОСТОЯНИЕ
+        // ==========================================
+        const state = {
+            currentDate: new Date(),
+            employees: [], 
+            prefs: {}, locks: {}, schedule: null, scheduleWarnings: [],
+            settings: { shiftsPerDay: 2, perShift: 4 }
+        };
+        let currentUid = null;
+        let currentWsId = null;
+        let isRemoteUpdate = false;
 
-  document.querySelectorAll('.sch-global-preset').forEach(btn => {
-    btn.onclick = async () => {
-      const c = +btn.dataset.c;
-      const w = +btn.dataset.w;
-      if (!isAdmin()) {
-        if (!confirm('Применить этот график только для себя?')) return;
-        applyPreset(c, w, currentAccount.key);
-      } else {
-        applyPreset(c, w, null);
-      }
-    };
-  });
+        const EMP_COLORS = ['#e74c3c','#3498db','#27ae60','#f39c12','#9b59b6','#1abc9c','#e67e22','#34495e','#c0392b','#16a085'];
+        const WEEKDAY_SHORT = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+        const PREF_STATES = ['available','preferred','unavailable','vacation'];
+        const PREF_COLORS = { available: '#ffffff', preferred: '#c8e6c9', unavailable: '#ffcdd2', vacation: '#bbdefb' };
+        const PREF_SYMBOLS = { available:'', preferred:'★', unavailable:'✕', vacation:'●' };
+        const SHIFT_COLORS = ['#f39c12', '#3f51b5', '#e91e63'];
+        const SHIFT_LABELS = ['День', 'Ночь', 'Вечер'];
+        const SHIFT_SYMBOLS = ['Д', 'Н', 'В'];
+        const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
-  $('schPresetClear').onclick = async () => {
-    if (!isAdmin()) {
-      if (!confirm('Сбросить свой график?')) return;
-    } else {
-      if (!confirm('Сбросить график всех сотрудников?')) return;
-    }
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const updates = {};
-    for (let d = 1; d <= daysInMonth; d++) {
-      const key = dayKey(currentYear, currentMonth, d);
-      const targets = isAdmin() ? schMembers : schMembers.filter(e => e.id === currentAccount.key);
-      targets.forEach(emp => {
-        if (!schPrefs[emp.id]) schPrefs[emp.id] = {};
-        schPrefs[emp.id][key] = 'available';
-        updates[`preferences/${currentWorkshop.key}/${emp.id}/${key}`] = null;
-      });
-    }
-    await update(ref(db), updates);
-    renderScheduleGrid();
-  };
+        const dateKey = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const getDaysInMonth = (date) => { const y = date.getFullYear(), m = date.getMonth(), n = new Date(y, m+1, 0).getDate(), arr = []; for (let i = 1; i <= n; i++) arr.push(new Date(y, m, i)); return arr; };
+        const getPref = (empId, key) => (state.prefs[empId] && state.prefs[empId][key]) || 'available';
+        const getLock = (empId, key) => state.locks[empId] ? state.locks[empId][key] : undefined;
+        const isWeekend = (d) => d.getDay() === 0 || d.getDay() === 6;
 
-  // === ФУНКЦИЯ КОПИРОВАНИЯ ГРАФИКА ===
-  schCopyBtn.onclick = async () => {
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const wdNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-    let text = `📅 График смен: ${monthNames[currentMonth]} ${currentYear}\n\n`;
-    let hasData = false;
+        // ==========================================
+        // 3. АВТОРИЗАЦИЯ
+        // ==========================================
+        async function registerAccount() {
+            const name = document.getElementById('reg-name').value.trim();
+            const surname = document.getElementById('reg-surname').value.trim();
+            const login = document.getElementById('reg-user').value.trim();
+            const pass = document.getElementById('reg-pass').value;
 
-    for (let d = 1; d <= daysInMonth; d++) {
-      const key = dayKey(currentYear, currentMonth, d);
-      const users = allMarks[key] || {};
-      const approved = Object.values(users).filter(u => u.status === 'approved');
+            if (!name || !surname || !login || !pass) return showError('Заполните все поля');
 
-      if (approved.length > 0) {
-        hasData = true;
-        const date = new Date(currentYear, currentMonth, d);
-        const wd = wdNames[date.getDay()];
+            const loginKey = safeKey(login);
+            const passHash = await sha256(pass);
 
-        // Группируем по сменам
-        const shifts = {}; 
-        approved.forEach(u => {
-          const sIdx = u.shift !== undefined ? u.shift : 0;
-          if (!shifts[sIdx]) shifts[sIdx] = [];
-          shifts[sIdx].push(u.name);
-        });
+            const snapshot = await db.ref('accountLogins/' + loginKey).get();
+            if (snapshot.exists()) return showError('Такой логин уже занят');
 
-        let line = `${d} (${wd}): `;
-        const shiftLines = [];
-        Object.keys(shifts).sort().forEach(sIdx => {
-          const shiftName = sIdx == 0 ? 'День' : sIdx == 1 ? 'Ночь' : 'Вечер';
-          shiftLines.push(`${shiftName} - ${shifts[sIdx].join(', ')}`);
-        });
-        line += shiftLines.join(' | ');
-        text += line + '\n';
-      }
-    }
+            const accountData = { login, passHash, name, surname, createdAt: Date.now() };
+            await db.ref('accounts/' + loginKey).set(accountData);
+            await db.ref('accountLogins/' + loginKey).set({ uid: loginKey });
 
-    if (!hasData) {
-      showCopyToast('Нет данных. Сначала рассчитайте график.');
-      return;
-    }
+            localStorage.setItem('currentUser', loginKey);
+            localStorage.setItem('currentUserName', `${name} ${surname}`);
+            currentUid = loginKey;
+            
+            showScreen('workshop-screen');
+            loadMyWorkshops();
+        }
 
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-        document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      showCopyToast('📋 График скопирован в буфер обмена!');
-    } catch (e) {
-      showCopyToast('Не удалось скопировать');
-    }
-  };
+        async function loginAccount() {
+            const login = document.getElementById('login-user').value.trim();
+            const pass = document.getElementById('login-pass').value;
+            if (!login || !pass) return showError('Введите логин и пароль');
 
-  schCalcBtn.onclick = async () => {
-    if (!isAdmin()) return;
-    schCalcBtn.disabled = true;
-    schCalcBtn.textContent = 'Расчёт...';
-    
-    const S = +$('schShiftsPerDay').value;
-    const P = +$('schPerShift').value;
-    
-    await set(ref(db, `workshops/${currentWorkshop.key}/scheduleConfig`), {
-      shiftsPerDay: S,
-      perShift: P
-    });
+            const loginKey = safeKey(login);
+            const snapshot = await db.ref('accounts/' + loginKey).get();
+            if (!snapshot.exists()) return showError('Неверный логин или пароль');
 
-    const generated = calculateScheduleLogic(schMembers, schPrefs, schCurrentMarks, S, P, schLocks);
-    
-    const updates = {};
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    
-    for (let d = 1; d <= daysInMonth; d++) {
-      const key = dayKey(currentYear, currentMonth, d);
-      schMembers.forEach(emp => {
-        updates[`marks/${currentWorkshop.key}/${key}/${emp.id}`] = null;
-      });
-    }
+            const account = snapshot.val();
+            const enteredHash = await sha256(pass);
+            if (enteredHash !== account.passHash) return showError('Неверный логин или пароль');
 
-    for (let d = 1; d <= daysInMonth; d++) {
-      const key = dayKey(currentYear, currentMonth, d);
-      const dayRes = generated[key];
-      if (!dayRes) continue;
-      
-      dayRes.shifts.forEach((ids, sIdx) => {
-        ids.forEach(id => {
-          const emp = schMembers.find(x => x.id === id);
-          if (emp) {
-            updates[`marks/${currentWorkshop.key}/${key}/${id}`] = {
-              name: emp.name,
-              status: 'approved',
-              shift: sIdx,
-              updatedAt: Date.now(),
-              phone: '', 
-              maxUsername: ''
-            };
-          }
-        });
-      });
-    }
+            localStorage.setItem('currentUser', loginKey);
+            localStorage.setItem('currentUserName', `${account.name} ${account.surname}`);
+            currentUid = loginKey;
+            
+            showScreen('workshop-screen');
+            loadMyWorkshops();
+        }
 
-    await update(ref(db), updates);
-    
-    schCalcBtn.disabled = false;
-    schCalcBtn.textContent = '⚡ Рассчитать';
-    scheduleBackdrop.classList.remove('open');
-    alert('График успешно рассчитан и сохранён!');
-  };
+        function logout() {
+            localStorage.clear();
+            location.reload();
+        }
 
-  function calculateScheduleLogic(emps, prefs, existingMarks, S, P, lockedEmpIds) {
-    const days = [];
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push(new Date(currentYear, currentMonth, i));
-    }
+        // ==========================================
+        // 4. РАБОТА С ЦЕХАМИ
+        // ==========================================
+        async function loadMyWorkshops() {
+            document.getElementById('current-user-name').textContent = localStorage.getItem('currentUserName');
+            const list = document.getElementById('my-workshops-list');
+            list.innerHTML = 'Загрузка...';
 
-    const totalCount = {};
-    const shiftTypeCount = {};
-    const lastWorkedIdx = {};
-    const consecutive = {};
-
-    emps.forEach(e => {
-      totalCount[e.id] = 0;
-      shiftTypeCount[e.id] = Array(S).fill(0);
-      lastWorkedIdx[e.id] = -100;
-      consecutive[e.id] = 0;
-    });
-
-    const result = {};
-    
-    days.forEach((date, dayIdx) => {
-      const key = dayKey(date.getFullYear(), date.getMonth(), date.getDate());
-      const todayAssigned = new Set();
-      const forcedOff = new Set();
-      const shifts = Array.from({length: S}, () => []);
-      
-      if (existingMarks && existingMarks[key]) {
-        emps.forEach(e => {
-          if (!lockedEmpIds[e.id]) return; 
-          
-          const mark = existingMarks[key][e.id];
-          if (!mark || mark.status !== 'approved') { forcedOff.add(e.id); return; }
-          
-          const oldShiftIdx = mark.shift;
-          if (oldShiftIdx !== undefined && oldShiftIdx !== null) {
-            if (oldShiftIdx < S && shifts[oldShiftIdx].length < P) {
-              shifts[oldShiftIdx].push(e.id);
-              todayAssigned.add(e.id);
-            } else {
-              let placed = false;
-              for (let s = 0; s < S; s++) {
-                if (shifts[s].length < P) {
-                  shifts[s].push(e.id);
-                  todayAssigned.add(e.id);
-                  placed = true;
-                  break;
-                }
-              }
-              if (!placed) forcedOff.add(e.id);
+            const snap = await db.ref('memberships/' + currentUid).get();
+            if (!snap.exists()) {
+                list.innerHTML = '<div class="info">У вас пока нет цехов.</div>';
+                return;
             }
-          } else {
-             forcedOff.add(e.id);
-          }
-        });
-      }
 
-      for (let s = 0; s < S; s++) {
-        while (shifts[s].length < P) {
-          const candidates = emps.filter(e => {
-            if (todayAssigned.has(e.id)) return false;
-            if (forcedOff.has(e.id)) return false;
-            const pref = (prefs[e.id] && prefs[e.id][key]) || 'available';
-            return pref !== 'unavailable' && pref !== 'vacation';
-          });
-          if (candidates.length === 0) break;
-
-          const score = (e) => {
-            let sc = 0;
-            const pref = (prefs[e.id] && prefs[e.id][key]) || 'available';
-            
-            // Жесткое равенство смен — приоритет
-            sc -= totalCount[e.id] * 100000;
-            
-            // Бонус за "Хочу работать"
-            if (pref === 'preferred') sc += 5000;
-            
-            // Бонус за отдых
-            const daysSince = dayIdx - lastWorkedIdx[e.id];
-            sc += Math.min(daysSince, 10) * 100;
-            
-            // Штраф за серию подряд
-            sc -= consecutive[e.id] * 1500;
-            
-            // Баланс между типами смен (день/ночь)
-            sc -= shiftTypeCount[e.id][s] * 500;
-            
-            sc += Math.random() * 10;
-            return sc;
-          };
-
-          const wantGroup = candidates
-            .filter(e => ((prefs[e.id] && prefs[e.id][key]) || 'available') === 'preferred')
-            .map(e => ({ e, sc: score(e) }))
-            .sort((a, b) => b.sc - a.sc);
-          const availGroup = candidates
-            .filter(e => ((prefs[e.id] && prefs[e.id][key]) || 'available') === 'available')
-            .map(e => ({ e, sc: score(e) }))
-            .sort((a, b) => b.sc - a.sc);
-
-          const best = [...wantGroup, ...availGroup][0];
-          if (!best) break;
-          shifts[s].push(best.e.id);
-          todayAssigned.add(best.e.id);
+            const memberships = snap.val();
+            list.innerHTML = '';
+            for (const wsId in memberships) {
+                const wsSnap = await db.ref('workshops/' + wsId).get();
+                if (wsSnap.exists()) {
+                    const ws = wsSnap.val();
+                    const div = document.createElement('div');
+                    div.className = 'workshop-item';
+                    div.innerHTML = `<strong>${ws.title}</strong><br><small>ID: ${wsId}</small>`;
+                    div.onclick = () => enterWorkshop(wsId, ws.title);
+                    list.appendChild(div);
+                }
+            }
         }
-      }
 
-      shifts.forEach((ids, s) => {
-        ids.forEach(id => {
-          totalCount[id]++;
-          shiftTypeCount[id][s]++;
-        });
-      });
-      emps.forEach(e => {
-        if (todayAssigned.has(e.id)) {
-          lastWorkedIdx[e.id] = dayIdx;
-          consecutive[e.id]++;
-        } else {
-          consecutive[e.id] = 0;
+        async function createWorkshop() {
+            const title = document.getElementById('create-name').value.trim();
+            const pass = document.getElementById('create-pass').value;
+            if (!title || !pass) return showError('Введите название и пароль');
+
+            const wsId = 'ws_' + Date.now().toString().slice(-6);
+            const passHash = await sha256(pass);
+            const userSnap = await db.ref('accounts/' + currentUid).get();
+            const uName = userSnap.val().name + ' ' + userSnap.val().surname;
+
+            await db.ref('workshops/' + wsId).set({ title, passHash, creator: currentUid });
+            await db.ref('memberships/' + currentUid + '/' + wsId).set({ role: 'admin', name: uName });
+            await db.ref('workshops/' + wsId + '/members/' + currentUid).set({ role: 'admin', name: uName });
+
+            enterWorkshop(wsId, title);
         }
-      });
 
-      result[key] = { shifts };
-    });
+        async function joinWorkshop() {
+            const wsId = document.getElementById('join-id').value.trim();
+            const pass = document.getElementById('join-pass').value;
+            if (!wsId || !pass) return showError('Введите ID и пароль');
 
-    return result;
-  }
+            const snap = await db.ref('workshops/' + wsId).get();
+            if (!snap.exists()) return showError('Цех не найден');
 
-  renderCalendar();
-  restoreSession();
-</script>
+            const ws = snap.val();
+            if (await sha256(pass) !== ws.passHash) return showError('Неверный пароль');
+
+            const uName = localStorage.getItem('currentUserName');
+            await db.ref('memberships/' + currentUid + '/' + wsId).set({ role: 'worker', name: uName });
+            await db.ref('workshops/' + wsId + '/members/' + currentUid).set({ role: 'worker', name: uName });
+
+            enterWorkshop(wsId, ws.title);
+        }
+
+        function enterWorkshop(id, title) {
+            currentWsId = id;
+            showScreen('main-screen');
+            document.getElementById('ws-title').textContent = title;
+            document.getElementById('ws-id-display').textContent = id;
+            document.getElementById('user-display').textContent = localStorage.getItem('currentUserName');
+            
+            // Устанавливаем сегодняшнюю дату в инпут копирования
+            document.getElementById('copy-date').value = dateKey(new Date());
+            
+            initFirebaseSync();
+        }
+
+        function leaveWorkshop() {
+            if(confirm('Выйти из цеха?')) {
+                currentWsId = null;
+                showScreen('workshop-screen');
+                loadMyWorkshops();
+            }
+        }
+
+        // ==========================================
+        // 5. СИНХРОНИЗАЦИЯ И 8 СЛОТОВ
+        // ==========================================
+        let saveTimeout = null;
+        function save() {
+            if (isRemoteUpdate || !currentWsId) return;
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                const dataToSave = {
+                    settings: state.settings, prefs: state.prefs,
+                    locks: state.locks, schedule: state.schedule
+                };
+                db.ref('workshops/' + currentWsId + '/scheduleData').update(dataToSave);
+            }, 500);
+        }
+
+        function initFirebaseSync() {
+            db.ref('workshops/' + currentWsId + '/members').on('value', snap => {
+                const members = snap.val() || {};
+                const memberUids = Object.keys(members);
+                
+                const realEmployees = memberUids.map((uid, index) => ({
+                    id: uid,
+                    name: members[uid].name,
+                    role: members[uid].role,
+                    color: EMP_COLORS[index % EMP_COLORS.length],
+                    fixed: false, shiftPref: 'any', isDummy: false
+                }));
+
+                const MIN_SLOTS = 8;
+                const dummyEmployees = [];
+                if (realEmployees.length < MIN_SLOTS) {
+                    for (let i = realEmployees.length + 1; i <= MIN_SLOTS; i++) {
+                        dummyEmployees.push({
+                            id: 'dummy_' + i,
+                            name: 'Сотрудник ' + i,
+                            role: 'worker', color: '#95a5a6',
+                            fixed: false, shiftPref: 'any', isDummy: true
+                        });
+                    }
+                }
+
+                state.employees = [...realEmployees, ...dummyEmployees];
+                
+                const myRole = members[currentUid] ? members[currentUid].role : 'worker';
+                document.getElementById('ws-role').textContent = myRole === 'admin' ? 'Администратор' : 'Сотрудник';
+                
+                const isAdmin = myRole === 'admin';
+                document.getElementById('generateBtn').style.display = isAdmin ? 'inline-block' : 'none';
+                document.getElementById('clearLocksBtn').style.display = isAdmin ? 'inline-block' : 'none';
+                document.getElementById('settings-panel').style.display = isAdmin ? 'flex' : 'none';
+
+                renderPrefGrid();
+                if (state.schedule) renderResult();
+            });
+
+            db.ref('workshops/' + currentWsId + '/scheduleData').on('value', snap => {
+                const data = snap.val();
+                if (!data) return;
+
+                isRemoteUpdate = true;
+                if (data.settings) {
+                    state.settings = data.settings;
+                    document.getElementById('shiftsPerDay').value = state.settings.shiftsPerDay;
+                    document.getElementById('perShift').value = state.settings.perShift;
+                }
+                state.prefs = data.prefs || {};
+                state.locks = data.locks || {};
+                state.schedule = data.schedule || null;
+
+                renderPrefGrid();
+                renderResult();
+                setTimeout(() => { isRemoteUpdate = false; }, 100);
+            });
+        }
+
+        // ==========================================
+        // 6. РЕНДЕР СЕТОК
+        // ==========================================
+        function renderPrefGrid() {
+            const days = getDaysInMonth(state.currentDate);
+            const grid = document.getElementById('prefGrid');
+            if(!grid) return;
+            
+            grid.style.gridTemplateColumns = `180px repeat(${days.length}, 34px)`;
+            const todayKey = dateKey(new Date());
+            let html = '<div class="grid-hdr"></div>';
+            
+            days.forEach(d => {
+                const we = isWeekend(d);
+                html += `<div class="grid-hdr ${we?'we':''} ${dateKey(d)===todayKey?'today':''}">
+                    <span class="gh-day">${d.getDate()}</span><span class="gh-wd">${WEEKDAY_SHORT[d.getDay()]}</span>
+                </div>`;
+            });
+
+            state.employees.forEach(emp => {
+                const nameClass = emp.isDummy ? 'dummy' : '';
+                html += `<div class="grid-name ${nameClass}" style="border-left-color:${emp.color};">${escapeHtml(emp.name)}</div>`;
+                days.forEach(d => {
+                    const key = dateKey(d), pref = getPref(emp.id, key);
+                    html += `<div class="pref-cell" data-emp="${emp.id}" data-date="${key}" style="background:${PREF_COLORS[pref]};" onclick="togglePref('${emp.id}', '${key}')">${PREF_SYMBOLS[pref]}</div>`;
+                });
+            });
+            grid.innerHTML = html;
+        }
+
+        function togglePref(empId, key) {
+            const isMyRow = empId === currentUid;
+            const isAdmin = document.getElementById('ws-role').textContent === 'Администратор';
+            const emp = state.employees.find(e => e.id === empId);
+            
+            if (emp && emp.isDummy && !isAdmin) return toast('Этот слот еще не занят реальным сотрудником');
+            if (!isMyRow && !isAdmin) return toast('Вы можете менять только свои пожелания!');
+
+            const cur = getPref(empId, key);
+            if (!state.prefs[empId]) state.prefs[empId] = {};
+            state.prefs[empId][key] = PREF_STATES[(PREF_STATES.indexOf(cur) + 1) % PREF_STATES.length];
+            save(); renderPrefGrid();
+        }
+
+        function setAllPrefs(name) {
+            if (document.getElementById('ws-role').textContent !== 'Администратор') return;
+            const days = getDaysInMonth(state.currentDate);
+            state.employees.forEach(emp => days.forEach(d => {
+                if (!state.prefs[emp.id]) state.prefs[emp.id] = {};
+                state.prefs[emp.id][dateKey(d)] = name;
+            }));
+            save(); renderPrefGrid();
+        }
+
+        function clearAllPrefs() {
+            if (document.getElementById('ws-role').textContent !== 'Администратор') return;
+            state.prefs = {}; save(); renderPrefGrid();
+        }
+
+        // ==========================================
+        // 7. АЛГОРИТМ ГЕНЕРАЦИИ
+        // ==========================================
+        function runSingleAlgorithm() {
+            const days = getDaysInMonth(state.currentDate), S = state.settings.shiftsPerDay, P = state.settings.perShift;
+            const totalCount = {}, shiftTypeCount = {}, lastWorkedIdx = {}, consecutive = {};
+            state.employees.forEach(e => { totalCount[e.id] = 0; shiftTypeCount[e.id] = Array(S).fill(0); lastWorkedIdx[e.id] = -100; consecutive[e.id] = 0; });
+            
+            const result = {}, warnings = [];
+            let hitCount = 0, missCount = 0;
+
+            days.forEach((date, dayIdx) => {
+                const key = dateKey(date), todayAssigned = new Set(), forcedOff = new Set(), shifts = Array.from({length: S}, () => []);
+                
+                if (state.locks) {
+                    Object.keys(state.locks).forEach(empId => {
+                        if (state.locks[empId][key] !== undefined) {
+                            const sIdx = state.locks[empId][key];
+                            if (sIdx === -1) forcedOff.add(empId);
+                            else if (sIdx < S && shifts[sIdx].length < P) { shifts[sIdx].push(empId); todayAssigned.add(empId); }
+                        }
+                    });
+                }
+
+                for (let s = 0; s < S; s++) {
+                    while (shifts[s].length < P) {
+                        const candidates = state.employees.filter(e => {
+                            if (todayAssigned.has(e.id) || forcedOff.has(e.id)) return false;
+                            const pref = getPref(e.id, key); return pref !== 'unavailable' && pref !== 'vacation';
+                        });
+                        if (candidates.length === 0) break;
+
+                        const score = (e) => {
+                            let sc = 0; if (e.fixed) sc += 500000;
+                            sc -= totalCount[e.id] * 5000; sc -= shiftTypeCount[e.id][s] * 800;
+                            sc += Math.min(dayIdx - lastWorkedIdx[e.id], 10) * 300; sc -= consecutive[e.id] * 1500;
+                            sc += Math.random() * 100; return sc;
+                        };
+
+                        const wantGroup = candidates.filter(e => getPref(e.id, key) === 'preferred').map(e => ({ e, sc: score(e) })).sort((a, b) => b.sc - a.sc);
+                        const availGroup = candidates.filter(e => getPref(e.id, key) === 'available').map(e => ({ e, sc: score(e) })).sort((a, b) => b.sc - a.sc);
+                        const best = [...wantGroup, ...availGroup][0];
+                        if (!best) break;
+                        shifts[s].push(best.e.id); todayAssigned.add(best.e.id);
+                    }
+                }
+
+                const assignedSet = new Set(); shifts.forEach(ids => ids.forEach(id => assignedSet.add(id)));
+                state.employees.forEach(e => {
+                    if (getPref(e.id, key) === 'preferred') {
+                        if (assignedSet.has(e.id)) hitCount++; else missCount++;
+                    }
+                });
+
+                shifts.forEach((ids, s) => ids.forEach(id => { totalCount[id]++; shiftTypeCount[id][s]++; }));
+                state.employees.forEach(e => { if (assignedSet.has(e.id)) { lastWorkedIdx[e.id] = dayIdx; consecutive[e.id]++; } else consecutive[e.id] = 0; });
+                
+                result[key] = { shifts, off: state.employees.filter(e => !assignedSet.has(e.id)).map(e => e.id) };
+            });
+            return { result, warnings, score: hitCount - (missCount * 2) };
+        }
+
+        function generateAndShow() {
+            if (document.getElementById('ws-role').textContent !== 'Администратор') return toast('Только администратор может рассчитывать график');
+            
+            let best = null;
+            for (let i = 0; i < 50; i++) {
+                const res = runSingleAlgorithm();
+                if (!best || res.score > best.score) best = res;
+            }
+            if (best) {
+                state.schedule = best.result;
+                save(); renderResult();
+                switchTab('result', document.querySelectorAll('.tab-main')[1]);
+                toast('✅ График успешно рассчитан!');
+            }
+        }
+
+        // ==========================================
+        // 8. РЕНДЕР РЕЗУЛЬТАТА И ЗАМКИ
+        // ==========================================
+        function renderResult() {
+            const emptyEl = document.getElementById('resultEmpty'), contentEl = document.getElementById('resultContent');
+            if (!state.schedule) { emptyEl.style.display = 'block'; contentEl.style.display = 'none'; return; }
+            emptyEl.style.display = 'none'; contentEl.style.display = 'block';
+
+            const days = getDaysInMonth(state.currentDate), grid = document.getElementById('resultGrid');
+            grid.style.gridTemplateColumns = `180px repeat(${days.length}, 34px)`;
+            const todayKey = dateKey(new Date());
+
+            let html = '<div class="grid-hdr"></div>';
+            days.forEach(d => {
+                const we = isWeekend(d);
+                html += `<div class="grid-hdr ${we?'we':''} ${dateKey(d)===todayKey?'today':''}">
+                    <span class="gh-day">${d.getDate()}</span><span class="gh-wd">${WEEKDAY_SHORT[d.getDay()]}</span>
+                </div>`;
+            });
+
+            state.employees.forEach(emp => {
+                const nameClass = emp.isDummy ? 'dummy' : '';
+                html += `<div class="grid-name ${nameClass}" style="border-left-color:${emp.color};">${escapeHtml(emp.name)}</div>`;
+                days.forEach(d => {
+                    const key = dateKey(d), day = state.schedule[key];
+                    if (!day) { html += '<div class="result-cell off"></div>'; return; }
+                    
+                    const isPreferred = getPref(emp.id, key) === 'preferred', lockVal = getLock(emp.id, key), isLocked = lockVal !== undefined;
+                    let shiftIdx = -1; for (let s = 0; s < day.shifts.length; s++) { if (day.shifts[s].includes(emp.id)) { shiftIdx = s; break; } }
+                    
+                    let cellClass = 'result-cell', content = '', style = '';
+                    if (shiftIdx === -1) {
+                        if (isLocked && lockVal === -1) { cellClass += ' locked-off'; }
+                        else if (isPreferred) { cellClass += ' pref-miss'; }
+                        else { cellClass += ' off'; }
+                    } else {
+                        if (isPreferred) cellClass += ' pref-hit';
+                        if (isLocked && lockVal === shiftIdx) cellClass += ' locked-shift';
+                        content = SHIFT_SYMBOLS[shiftIdx]; style = `background:${SHIFT_COLORS[shiftIdx]}`;
+                    }
+                    html += `<div class="${cellClass}" style="${style}" data-emp="${emp.id}" data-date="${key}" onclick="toggleResultLock('${emp.id}', '${key}')">${content}</div>`;
+                });
+            });
+            grid.innerHTML = html;
+        }
+
+        function toggleResultLock(empId, key) {
+            if (document.getElementById('ws-role').textContent !== 'Администратор') return toast('Только администратор может фиксировать смены');
+            
+            if (state.locks[empId] && state.locks[empId][key] !== undefined) {
+                return toast('🔒 Уже зафиксировано. Для снятия используйте кнопку «Снять блокировки»');
+            }
+
+            if (!state.locks[empId]) state.locks[empId] = {};
+            
+            const day = state.schedule[key];
+            let sIdx = -1; 
+            if (day) {
+                day.shifts.forEach((ids, s) => { if (ids.includes(empId)) sIdx = s; });
+            }
+            state.locks[empId][key] = sIdx; 
+            toast(`🔒 Зафиксировано: ${sIdx === -1 ? 'Выходной' : SHIFT_LABELS[sIdx]}. Пересчет...`);
+            
+            let best = null;
+            for (let i = 0; i < 30; i++) {
+                const res = runSingleAlgorithm();
+                if (!best || res.score > best.score) best = res;
+            }
+            if (best) state.schedule = best.result;
+            
+            save(); 
+            renderResult();
+            renderPrefGrid();
+        }
+
+        function clearAllLocks() {
+            if (document.getElementById('ws-role').textContent !== 'Администратор') return toast('Только администратор может снимать блокировки');
+            if (Object.keys(state.locks).length === 0) return toast('Нет активных блокировок');
+            
+            if (!confirm('Вы уверены, что хотите снять ВСЕ блокировки? График можно будет пересчитать заново.')) return;
+            
+            state.locks = {};
+            save();
+            renderResult();
+            renderPrefGrid();
+            toast('🔓 Все блокировки сняты');
+        }
+
+        function onSettingsChange() {
+            state.settings.shiftsPerDay = +document.getElementById('shiftsPerDay').value;
+            state.settings.perShift = Math.max(1, +document.getElementById('perShift').value || 1);
+            state.schedule = null;
+            save(); renderResult();
+        }
+
+        // ==========================================
+        // 8.1. КОПИРОВАНИЕ РЕЗУЛЬТАТА (ДЕНЬ / НЕДЕЛЯ / МЕСЯЦ)
+        // ==========================================
+        function copyResult(period) {
+            if (!state.schedule) return toast('Сначала рассчитайте график');
+
+            const dateInput = document.getElementById('copy-date').value;
+            if (!dateInput && period !== 'month') return toast('Выберите дату');
+
+            // Парсим локальную дату (YYYY-MM-DD) для корректного отображения дня недели
+            let targetDate = new Date(dateInput + 'T00:00:00');
+            let text = '';
+            const wsTitle = document.getElementById('ws-title').textContent;
+
+            function formatDayText(d) {
+                const key = dateKey(d);
+                const dayData = state.schedule[key];
+                const wd = WEEKDAY_SHORT[d.getDay()];
+                let res = `🔹 ${wd}, ${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3).toLowerCase()}\n`;
+                
+                if (!dayData || !dayData.shifts || dayData.shifts.every(s => s.length === 0)) {
+                    res += `   ❌ Нет смен\n`;
+                } else {
+                    dayData.shifts.forEach((empIds, sIdx) => {
+                        if (empIds.length > 0) {
+                            const names = empIds.map(id => {
+                                const emp = state.employees.find(e => e.id === id);
+                                return emp ? emp.name : 'Неизвестный';
+                            }).join(', ');
+                            res += `   🕒 ${SHIFT_LABELS[sIdx]}: ${names}\n`;
+                        }
+                    });
+                }
+                return res;
+            }
+
+            if (period === 'month') {
+                text = `📋 График смен: ${wsTitle}\n📅 Месяц: ${MONTHS[state.currentDate.getMonth()]} ${state.currentDate.getFullYear()}\n\n`;
+                const days = getDaysInMonth(state.currentDate);
+                days.forEach(d => { text += formatDayText(d) + '\n'; });
+            } 
+            else if (period === 'day') {
+                text = `📋 График смен: ${wsTitle}\n`;
+                text += formatDayText(targetDate);
+            } 
+            else if (period === 'week') {
+                const d = new Date(targetDate);
+                const dayOfWeek = d.getDay() || 7; // Воскресенье = 7
+                const startOfWeek = new Date(d);
+                startOfWeek.setDate(d.getDate() - dayOfWeek + 1); // Находим понедельник
+                
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+                text = `📋 График смен: ${wsTitle}\n`;
+                text += `📅 Неделя: ${startOfWeek.getDate()} - ${endOfWeek.getDate()} ${MONTHS[startOfWeek.getMonth()]}\n\n`;
+                
+                for (let i = 0; i < 7; i++) {
+                    const current = new Date(startOfWeek);
+                    current.setDate(startOfWeek.getDate() + i);
+                    text += formatDayText(current) + '\n';
+                }
+            }
+
+            navigator.clipboard.writeText(text).then(() => {
+                toast('✅ График скопирован в буфер!');
+            }).catch(err => {
+                console.error('Ошибка копирования: ', err);
+                toast('❌ Не удалось скопировать');
+            });
+        }
+
+        // ==========================================
+        // 9. НАВИГАЦИЯ
+        // ==========================================
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function switchTab(tab, btnElement) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-main').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+            if (btnElement) {
+                btnElement.classList.add('active');
+            } else {
+                const btns = document.querySelectorAll('.tab-main');
+                if (tab === 'setup') btns[0].classList.add('active');
+                else btns[1].classList.add('active');
+            }
+            if (tab === 'result') renderResult();
+        }
+
+        document.getElementById('tab-login').onclick = () => {
+            document.getElementById('tab-login').classList.add('active');
+            document.getElementById('tab-register').classList.remove('active');
+            document.getElementById('form-login').style.display = 'block';
+            document.getElementById('form-register').style.display = 'none';
+        };
+        document.getElementById('tab-register').onclick = () => {
+            document.getElementById('tab-register').classList.add('active');
+            document.getElementById('tab-login').classList.remove('active');
+            document.getElementById('form-register').style.display = 'block';
+            document.getElementById('form-login').style.display = 'none';
+        };
+        document.getElementById('btn-show-join').onclick = () => {
+            const f = document.getElementById('form-join'); f.style.display = f.style.display === 'none' ? 'block' : 'none';
+        };
+        document.getElementById('btn-show-create').onclick = () => {
+            const f = document.getElementById('form-create'); f.style.display = f.style.display === 'none' ? 'block' : 'none';
+        };
+
+        window.onload = () => {
+            currentUid = localStorage.getItem('currentUser');
+            if (currentUid) {
+                showScreen('workshop-screen');
+                loadMyWorkshops();
+            } else {
+                showScreen('auth-screen');
+            }
+        };
+    </script>
 </body>
 </html>
