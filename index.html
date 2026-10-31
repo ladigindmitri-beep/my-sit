@@ -94,7 +94,6 @@
         .empty-state { text-align: center; padding: 40px 20px; color: #999; }
         #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c3e50; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 9999; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
         
-        /* Стили для настроек администратора */
         .admin-settings-row { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #eee; margin-bottom: 10px; }
         .admin-settings-row label { display: flex; align-items: center; gap: 5px; cursor: pointer; font-weight: 600; font-size: 13px; }
     </style>
@@ -369,7 +368,6 @@
             let pWs = urlParams.get('ws');
             let pKey = urlParams.get('adminKey');
             
-            // Проверяем localStorage, если пользователь перешел по ссылке до авторизации
             if (!pWs) pWs = localStorage.getItem('pendingAdminWs');
             if (!pKey) pKey = localStorage.getItem('pendingAdminKey');
             
@@ -383,7 +381,6 @@
                         await db.ref('workshops/' + pWs + '/members/' + currentUid).set({ role: 'admin', name: uName, hidden: true });
                         localStorage.removeItem('pendingAdminWs');
                         localStorage.removeItem('pendingAdminKey');
-                        // Очищаем URL
                         window.history.replaceState({}, document.title, window.location.pathname);
                         enterWorkshop(pWs, ws.title);
                         toast('👑 Вы вошли как Администратор по ссылке!');
@@ -396,11 +393,22 @@
             return false;
         }
 
-        function showInviteLinks() {
-            if (!currentWsData || !currentWsData.adminKey) return toast('Ошибка: нет ключа цеха');
+        // ИСПРАВЛЕННАЯ ФУНКЦИЯ ГЕНЕРАЦИИ ССЫЛОК
+        async function showInviteLinks() {
+            if (!currentWsData) return toast('Ошибка: данные цеха не загружены');
+            
+            let adminKey = currentWsData.adminKey;
+            
+            // Если ключа нет (цех создан в старой версии), генерируем и сохраняем
+            if (!adminKey) {
+                adminKey = Math.random().toString(36).substring(2, 10);
+                await db.ref('workshops/' + currentWsId + '/adminKey').set(adminKey);
+                currentWsData.adminKey = adminKey; // обновляем локальные данные
+                toast('🔑 Сгенерирован новый ключ цеха');
+            }
             
             const baseUrl = window.location.href.split('?')[0];
-            const adminLink = `${baseUrl}?ws=${currentWsId}&adminKey=${currentWsData.adminKey}`;
+            const adminLink = `${baseUrl}?ws=${currentWsId}&adminKey=${adminKey}`;
             const workerLink = `${baseUrl}?ws=${currentWsId}`;
             
             const msg = `🔗 Ссылка для АДМИНА (полные права):\n${adminLink}\n\n🔗 Ссылка для СОТРУДНИКА (нужен пароль цеха):\n${workerLink}`;
@@ -451,12 +459,10 @@
             const userSnap = await db.ref('accounts/' + currentUid).get();
             const uName = userSnap.val().name + ' ' + userSnap.val().surname;
             
-            // Генерируем секретный ключ для админов
             const adminKey = Math.random().toString(36).substring(2, 10);
 
             await db.ref('workshops/' + wsId).set({ title, passHash, creator: currentUid, adminKey });
             await db.ref('memberships/' + currentUid + '/' + wsId).set({ role: 'admin', name: uName });
-            // Создатель по умолчанию скрыт (hidden: true), чтобы не занимать смены
             await db.ref('workshops/' + wsId + '/members/' + currentUid).set({ role: 'admin', name: uName, hidden: true });
 
             enterWorkshop(wsId, title);
@@ -524,7 +530,6 @@
                 const members = wsData.members || {};
                 const memberUids = Object.keys(members);
                 
-                // Берем только тех, кто НЕ скрыт (hidden !== true)
                 const activeUids = memberUids.filter(uid => !members[uid].hidden);
                 
                 const realEmployees = activeUids.map((uid, index) => ({
@@ -535,7 +540,6 @@
                     fixed: false, shiftPref: 'any', isDummy: false
                 }));
 
-                // Добиваем пустыми слотами до 8
                 const MIN_SLOTS = 8;
                 const dummyEmployees = [];
                 if (realEmployees.length < MIN_SLOTS) {
@@ -560,7 +564,6 @@
                 document.getElementById('clearLocksBtn').style.display = isAdmin ? 'inline-block' : 'none';
                 document.getElementById('settings-panel').style.display = isAdmin ? 'flex' : 'none';
                 
-                // Обновляем чекбокс видимости
                 document.getElementById('my-visibility').checked = !myMember.hidden;
 
                 renderPrefGrid();
@@ -589,7 +592,6 @@
 
         async function toggleMyVisibility() {
             const isChecked = document.getElementById('my-visibility').checked;
-            // Сохраняем в базу, что мы хотим быть видимыми (или нет)
             await db.ref(`workshops/${currentWsId}/members/${currentUid}/hidden`).set(!isChecked);
             toast(isChecked ? '👁 Вы появились в графике' : '👻 Вы скрыты из графика');
         }
@@ -939,7 +941,6 @@
         };
 
         window.onload = async () => {
-            // Проверяем, есть ли в URL параметры для входа по ссылке
             const urlParams = new URLSearchParams(window.location.search);
             const joinWs = urlParams.get('ws');
             const adminKey = urlParams.get('adminKey');
