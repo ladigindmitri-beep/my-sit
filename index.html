@@ -44,10 +44,13 @@
 
         .panel { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
         .panel h3 { font-size: 14px; margin-bottom: 10px; color: #555; text-transform: uppercase; }
+        
         .btn-primary { padding: 10px 16px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; }
         .btn-primary:hover { background: var(--primary-hover); }
         .btn-success { padding: 8px 12px; background: var(--success); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 13px; }
         .btn-success:hover { background: #27ae60; }
+        .btn-outline { padding: 8px 12px; background: #fff; color: var(--primary); border: 1px solid var(--primary); border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: 0.2s; }
+        .btn-outline:hover { background: #e3f2fd; }
 
         .grid-wrap { overflow-x: auto; border-radius: 8px; background: #fff; padding: 6px; border: 1px solid #ecf0f1; }
         .grid { display: grid; gap: 2px; min-width: max-content; }
@@ -90,6 +93,10 @@
 
         .empty-state { text-align: center; padding: 40px 20px; color: #999; }
         #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c3e50; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 9999; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        
+        /* Стили для настроек администратора */
+        .admin-settings-row { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #eee; margin-bottom: 10px; }
+        .admin-settings-row label { display: flex; align-items: center; gap: 5px; cursor: pointer; font-weight: 600; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -163,10 +170,14 @@
                 </div>
             </header>
 
-            <div class="panel top-bar" id="settings-panel">
-                <div style="display:flex; gap:15px; align-items:center;">
-                    <label>Смен в день: <select id="shiftsPerDay" onchange="onSettingsChange()"><option value="1">1</option><option value="2" selected>2</option></select></label>
-                    <label>Человек в смене: <input type="number" id="perShift" min="1" max="10" value="4" style="width:60px; padding:4px;" onchange="onSettingsChange()"></label>
+            <!-- ПАНЕЛЬ НАСТРОЕК (Только для Админа) -->
+            <div class="panel top-bar" id="settings-panel" style="display: none;">
+                <div class="admin-settings-row">
+                    <label><input type="checkbox" id="my-visibility" onchange="toggleMyVisibility()"> Показывать меня в графике</label>
+                    <button class="btn-outline" onclick="showInviteLinks()">🔗 Ссылки для приглашения</button>
+                    <span style="font-size: 12px; color:#888; flex: 1; text-align: right;">Настройки графика:</span>
+                    <label style="font-weight: normal;">Смен в день: <select id="shiftsPerDay" onchange="onSettingsChange()" style="margin-left:5px;"><option value="1">1</option><option value="2" selected>2</option></select></label>
+                    <label style="font-weight: normal;">Человек в смене: <input type="number" id="perShift" min="1" max="10" value="4" style="width:50px; padding:2px; margin-left:5px;" onchange="onSettingsChange()"></label>
                 </div>
             </div>
 
@@ -198,11 +209,10 @@
                 <div class="panel">
                     <div id="resultEmpty" class="empty-state">Нажмите «Рассчитать график» для генерации</div>
                     <div id="resultContent" style="display:none;">
-                        <div class="info-banner" style="background:#e3f2fd; padding:10px; border-radius:8px; font-size:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                            <span>💡 <strong>Донастройка:</strong> Кликните по ячейке, чтобы зафиксировать смену (🔒).</span>
+                        <div class="info-banner" style="background:#e3f2fd; padding:10px; border-radius:8px; font-size:12px; margin-bottom:10px;">
+                            💡 <strong>Донастройка:</strong> Кликните по ячейке, чтобы зафиксировать смену (🔒).
                         </div>
                         
-                        <!-- БЛОК КОПИРОВАНИЯ -->
                         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; background:#f8f9fa; padding:10px; border-radius:8px; border:1px solid #eee;">
                             <span style="font-weight:600; font-size:13px; color:#555;">📋 Копировать в чат:</span>
                             <input type="date" id="copy-date" style="padding:6px; border-radius:6px; border:1px solid #ccc; font-family:inherit;">
@@ -271,6 +281,7 @@
         let currentUid = null;
         let currentWsId = null;
         let isRemoteUpdate = false;
+        let currentWsData = null;
 
         const EMP_COLORS = ['#e74c3c','#3498db','#27ae60','#f39c12','#9b59b6','#1abc9c','#e67e22','#34495e','#c0392b','#16a085'];
         const WEEKDAY_SHORT = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
@@ -314,8 +325,11 @@
             localStorage.setItem('currentUserName', `${name} ${surname}`);
             currentUid = loginKey;
             
-            showScreen('workshop-screen');
-            loadMyWorkshops();
+            const joined = await checkPendingInvites();
+            if (!joined) {
+                showScreen('workshop-screen');
+                loadMyWorkshops();
+            }
         }
 
         async function loginAccount() {
@@ -335,8 +349,11 @@
             localStorage.setItem('currentUserName', `${account.name} ${account.surname}`);
             currentUid = loginKey;
             
-            showScreen('workshop-screen');
-            loadMyWorkshops();
+            const joined = await checkPendingInvites();
+            if (!joined) {
+                showScreen('workshop-screen');
+                loadMyWorkshops();
+            }
         }
 
         function logout() {
@@ -345,7 +362,58 @@
         }
 
         // ==========================================
-        // 4. РАБОТА С ЦЕХАМИ
+        // 4. ССЫЛКИ-ПРИГЛАШЕНИЯ
+        // ==========================================
+        async function checkPendingInvites() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let pWs = urlParams.get('ws');
+            let pKey = urlParams.get('adminKey');
+            
+            // Проверяем localStorage, если пользователь перешел по ссылке до авторизации
+            if (!pWs) pWs = localStorage.getItem('pendingAdminWs');
+            if (!pKey) pKey = localStorage.getItem('pendingAdminKey');
+            
+            if (pWs && pKey && currentUid) {
+                const snap = await db.ref('workshops/' + pWs).get();
+                if (snap.exists()) {
+                    const ws = snap.val();
+                    if (ws.adminKey === pKey) {
+                        const uName = localStorage.getItem('currentUserName');
+                        await db.ref('memberships/' + currentUid + '/' + pWs).set({ role: 'admin', name: uName });
+                        await db.ref('workshops/' + pWs + '/members/' + currentUid).set({ role: 'admin', name: uName, hidden: true });
+                        localStorage.removeItem('pendingAdminWs');
+                        localStorage.removeItem('pendingAdminKey');
+                        // Очищаем URL
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                        enterWorkshop(pWs, ws.title);
+                        toast('👑 Вы вошли как Администратор по ссылке!');
+                        return true;
+                    } else {
+                        toast('❌ Неверный код приглашения');
+                    }
+                }
+            }
+            return false;
+        }
+
+        function showInviteLinks() {
+            if (!currentWsData || !currentWsData.adminKey) return toast('Ошибка: нет ключа цеха');
+            
+            const baseUrl = window.location.href.split('?')[0];
+            const adminLink = `${baseUrl}?ws=${currentWsId}&adminKey=${currentWsData.adminKey}`;
+            const workerLink = `${baseUrl}?ws=${currentWsId}`;
+            
+            const msg = `🔗 Ссылка для АДМИНА (полные права):\n${adminLink}\n\n🔗 Ссылка для СОТРУДНИКА (нужен пароль цеха):\n${workerLink}`;
+            
+            prompt('Скопируйте ссылки:', msg);
+            
+            navigator.clipboard.writeText(msg).then(() => {
+                toast('✅ Ссылки скопированы в буфер обмена!');
+            }).catch(() => {});
+        }
+
+        // ==========================================
+        // 5. РАБОТА С ЦЕХАМИ
         // ==========================================
         async function loadMyWorkshops() {
             document.getElementById('current-user-name').textContent = localStorage.getItem('currentUserName');
@@ -382,10 +450,14 @@
             const passHash = await sha256(pass);
             const userSnap = await db.ref('accounts/' + currentUid).get();
             const uName = userSnap.val().name + ' ' + userSnap.val().surname;
+            
+            // Генерируем секретный ключ для админов
+            const adminKey = Math.random().toString(36).substring(2, 10);
 
-            await db.ref('workshops/' + wsId).set({ title, passHash, creator: currentUid });
+            await db.ref('workshops/' + wsId).set({ title, passHash, creator: currentUid, adminKey });
             await db.ref('memberships/' + currentUid + '/' + wsId).set({ role: 'admin', name: uName });
-            await db.ref('workshops/' + wsId + '/members/' + currentUid).set({ role: 'admin', name: uName });
+            // Создатель по умолчанию скрыт (hidden: true), чтобы не занимать смены
+            await db.ref('workshops/' + wsId + '/members/' + currentUid).set({ role: 'admin', name: uName, hidden: true });
 
             enterWorkshop(wsId, title);
         }
@@ -403,7 +475,7 @@
 
             const uName = localStorage.getItem('currentUserName');
             await db.ref('memberships/' + currentUid + '/' + wsId).set({ role: 'worker', name: uName });
-            await db.ref('workshops/' + wsId + '/members/' + currentUid).set({ role: 'worker', name: uName });
+            await db.ref('workshops/' + wsId + '/members/' + currentUid).set({ role: 'worker', name: uName, hidden: false });
 
             enterWorkshop(wsId, ws.title);
         }
@@ -414,8 +486,6 @@
             document.getElementById('ws-title').textContent = title;
             document.getElementById('ws-id-display').textContent = id;
             document.getElementById('user-display').textContent = localStorage.getItem('currentUserName');
-            
-            // Устанавливаем сегодняшнюю дату в инпут копирования
             document.getElementById('copy-date').value = dateKey(new Date());
             
             initFirebaseSync();
@@ -430,7 +500,7 @@
         }
 
         // ==========================================
-        // 5. СИНХРОНИЗАЦИЯ И 8 СЛОТОВ
+        // 6. СИНХРОНИЗАЦИЯ И ВИДИМОСТЬ
         // ==========================================
         let saveTimeout = null;
         function save() {
@@ -446,11 +516,18 @@
         }
 
         function initFirebaseSync() {
-            db.ref('workshops/' + currentWsId + '/members').on('value', snap => {
-                const members = snap.val() || {};
+            db.ref('workshops/' + currentWsId).on('value', snap => {
+                const wsData = snap.val();
+                currentWsData = wsData;
+                if (!wsData) return;
+                
+                const members = wsData.members || {};
                 const memberUids = Object.keys(members);
                 
-                const realEmployees = memberUids.map((uid, index) => ({
+                // Берем только тех, кто НЕ скрыт (hidden !== true)
+                const activeUids = memberUids.filter(uid => !members[uid].hidden);
+                
+                const realEmployees = activeUids.map((uid, index) => ({
                     id: uid,
                     name: members[uid].name,
                     role: members[uid].role,
@@ -458,6 +535,7 @@
                     fixed: false, shiftPref: 'any', isDummy: false
                 }));
 
+                // Добиваем пустыми слотами до 8
                 const MIN_SLOTS = 8;
                 const dummyEmployees = [];
                 if (realEmployees.length < MIN_SLOTS) {
@@ -473,13 +551,17 @@
 
                 state.employees = [...realEmployees, ...dummyEmployees];
                 
-                const myRole = members[currentUid] ? members[currentUid].role : 'worker';
+                const myMember = members[currentUid] || { role: 'worker', hidden: false };
+                const myRole = myMember.role;
                 document.getElementById('ws-role').textContent = myRole === 'admin' ? 'Администратор' : 'Сотрудник';
                 
                 const isAdmin = myRole === 'admin';
                 document.getElementById('generateBtn').style.display = isAdmin ? 'inline-block' : 'none';
                 document.getElementById('clearLocksBtn').style.display = isAdmin ? 'inline-block' : 'none';
                 document.getElementById('settings-panel').style.display = isAdmin ? 'flex' : 'none';
+                
+                // Обновляем чекбокс видимости
+                document.getElementById('my-visibility').checked = !myMember.hidden;
 
                 renderPrefGrid();
                 if (state.schedule) renderResult();
@@ -505,8 +587,15 @@
             });
         }
 
+        async function toggleMyVisibility() {
+            const isChecked = document.getElementById('my-visibility').checked;
+            // Сохраняем в базу, что мы хотим быть видимыми (или нет)
+            await db.ref(`workshops/${currentWsId}/members/${currentUid}/hidden`).set(!isChecked);
+            toast(isChecked ? '👁 Вы появились в графике' : '👻 Вы скрыты из графика');
+        }
+
         // ==========================================
-        // 6. РЕНДЕР СЕТОК
+        // 7. РЕНДЕР СЕТОК
         // ==========================================
         function renderPrefGrid() {
             const days = getDaysInMonth(state.currentDate);
@@ -565,7 +654,7 @@
         }
 
         // ==========================================
-        // 7. АЛГОРИТМ ГЕНЕРАЦИИ
+        // 8. АЛГОРИТМ ГЕНЕРАЦИИ
         // ==========================================
         function runSingleAlgorithm() {
             const days = getDaysInMonth(state.currentDate), S = state.settings.shiftsPerDay, P = state.settings.perShift;
@@ -643,7 +732,7 @@
         }
 
         // ==========================================
-        // 8. РЕНДЕР РЕЗУЛЬТАТА И ЗАМКИ
+        // 9. РЕНДЕР РЕЗУЛЬТАТА И ЗАМКИ
         // ==========================================
         function renderResult() {
             const emptyEl = document.getElementById('resultEmpty'), contentEl = document.getElementById('resultContent');
@@ -738,7 +827,7 @@
         }
 
         // ==========================================
-        // 8.1. КОПИРОВАНИЕ РЕЗУЛЬТАТА (ДЕНЬ / НЕДЕЛЯ / МЕСЯЦ)
+        // 10. КОПИРОВАНИЕ РЕЗУЛЬТАТА
         // ==========================================
         function copyResult(period) {
             if (!state.schedule) return toast('Сначала рассчитайте график');
@@ -746,7 +835,6 @@
             const dateInput = document.getElementById('copy-date').value;
             if (!dateInput && period !== 'month') return toast('Выберите дату');
 
-            // Парсим локальную дату (YYYY-MM-DD) для корректного отображения дня недели
             let targetDate = new Date(dateInput + 'T00:00:00');
             let text = '';
             const wsTitle = document.getElementById('ws-title').textContent;
@@ -784,9 +872,9 @@
             } 
             else if (period === 'week') {
                 const d = new Date(targetDate);
-                const dayOfWeek = d.getDay() || 7; // Воскресенье = 7
+                const dayOfWeek = d.getDay() || 7;
                 const startOfWeek = new Date(d);
-                startOfWeek.setDate(d.getDate() - dayOfWeek + 1); // Находим понедельник
+                startOfWeek.setDate(d.getDate() - dayOfWeek + 1);
                 
                 const endOfWeek = new Date(startOfWeek);
                 endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -810,7 +898,7 @@
         }
 
         // ==========================================
-        // 9. НАВИГАЦИЯ
+        // 11. НАВИГАЦИЯ И ЗАПУСК
         // ==========================================
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -850,11 +938,28 @@
             const f = document.getElementById('form-create'); f.style.display = f.style.display === 'none' ? 'block' : 'none';
         };
 
-        window.onload = () => {
+        window.onload = async () => {
+            // Проверяем, есть ли в URL параметры для входа по ссылке
+            const urlParams = new URLSearchParams(window.location.search);
+            const joinWs = urlParams.get('ws');
+            const adminKey = urlParams.get('adminKey');
+            
+            if (joinWs) {
+                document.getElementById('join-id').value = joinWs;
+                document.getElementById('btn-show-join').click();
+                if (adminKey) {
+                    localStorage.setItem('pendingAdminWs', joinWs);
+                    localStorage.setItem('pendingAdminKey', adminKey);
+                }
+            }
+
             currentUid = localStorage.getItem('currentUser');
             if (currentUid) {
-                showScreen('workshop-screen');
-                loadMyWorkshops();
+                const joined = await checkPendingInvites();
+                if (!joined) {
+                    showScreen('workshop-screen');
+                    loadMyWorkshops();
+                }
             } else {
                 showScreen('auth-screen');
             }
